@@ -1,0 +1,106 @@
+name: Build macOS App
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout代码
+      uses: actions/checkout@v4
+
+    - name: 设置Python环境
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pyinstaller
+
+    - name: 构建.app文件
+      run: |
+        pyinstaller --name="十二动物号码归纳器" \
+          --windowed \
+          --onefile \
+          --add-data="ui:ui" \
+          --osx-bundle-identifier="com.animal-number-ledger.app" \
+          app.py
+
+    - name: 验证.app文件
+      run: |
+        ls -la dist/
+        if [ -d "dist/十二动物号码归纳器.app" ]; then
+          echo "✓ .app文件构建成功"
+        else
+          echo "✗ .app文件构建失败"
+          exit 1
+        fi
+
+    - name: 创建DMG安装包
+      run: |
+        # 创建临时目录
+        mkdir -p dist/dmg
+
+        # 复制.app到临时目录
+        cp -r "dist/十二动物号码归纳器.app" dist/dmg/
+
+        # 创建Applications快捷方式
+        ln -s /Applications dist/dmg/Applications
+
+        # 创建DMG
+        hdiutil create -volname "十二动物号码归纳器" \
+          -srcfolder dist/dmg \
+          -ov \
+          -format UDZO \
+          "dist/十二动物号码归纳器-v1.1.0.dmg"
+
+        echo "✓ DMG文件创建成功"
+
+    - name: 显示构建结果
+      run: |
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "构建完成！"
+        echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        ls -lh dist/*.dmg
+        ls -lh dist/*.app
+
+    - name: 上传.app文件
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-app
+        path: dist/十二动物号码归纳器.app
+        retention-days: 30
+
+    - name: 上传DMG安装包
+      uses: actions/upload-artifact@v4
+      with:
+        name: macos-dmg
+        path: dist/十二动物号码归纳器-v1.1.0.dmg
+        retention-days: 30
+
+    - name: 构建摘要
+      run: |
+        echo "## 🎉 macOS构建成功！" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📦 构建产物" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ 十二动物号码归纳器.app" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ 十二动物号码归纳器-v1.1.0.dmg" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 📥 下载方式" >> $GITHUB_STEP_SUMMARY
+        echo "在Actions页面的Artifacts中下载" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### ⚠️ 使用提示" >> $GITHUB_STEP_SUMMARY
+        echo "首次打开时右键点击 → 选择'打开' → 点击'打开'确认" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### 💡 输入格式" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ 正确: 1,2,3各0.50" >> $GITHUB_STEP_SUMMARY
+        echo "- ❌ 错误: 1.2.3各0.50（不要用句号）" >> $GITHUB_STEP_SUMMARY

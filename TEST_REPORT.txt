@@ -1,0 +1,78 @@
+================================================================================
+十二动物号码归纳器 - 完整测试报告
+================================================================================
+测试时间: 2026-07-23 00:49:39
+Python 版本: 3.12.13 (main, Mar  3 2026, 15:01:35) [MSC v.1944 64 bit (AMD64)]
+
+================================================================================
+测试结果详情
+================================================================================
+============================= test session starts =============================
+platform win32 -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0 -- C:\Users\2SS2\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe
+rootdir: C:\Users\2SS2\animal-number-ledger
+collecting ... collected 37 items
+
+tests/test_backup.py::TestBackup::test_export_import PASSED              [  2%]
+tests/test_backup.py::TestBackup::test_validate_backup PASSED            [  5%]
+tests/test_calculator.py::TestCalculator::test_accumulation PASSED       [  8%]
+tests/test_calculator.py::TestCalculator::test_animal_calculation PASSED [ 10%]
+tests/test_calculator.py::TestCalculator::test_multiple_numbers PASSED   [ 13%]
+tests/test_calculator.py::TestCalculator::test_single_number_calculation PASSED [ 16%]
+tests/test_calculator.py::TestCalculator::test_sources PASSED            [ 18%]
+tests/test_database.py::TestDatabase::test_archive_ledger PASSED         [ 21%]
+tests/test_database.py::TestDatabase::test_atomic_batch_rolls_back_on_failure PASSED [ 24%]
+tests/test_database.py::TestDatabase::test_atomic_batch_with_allocations PASSED [ 27%]
+tests/test_database.py::TestDatabase::test_create_ledger PASSED          [ 29%]
+tests/test_database.py::TestDatabase::test_delete_cascade PASSED         [ 32%]
+tests/test_database.py::TestDatabase::test_existing_archived_ledger_total_is_backfilled PASSED [ 35%]
+tests/test_database.py::TestDatabase::test_init_db PASSED                [ 37%]
+tests/test_database.py::TestDatabase::test_ledger_totals PASSED          [ 40%]
+tests/test_database.py::TestDatabase::test_validate_animal_mapping PASSED [ 43%]
+tests/test_deletion.py::TestDeletion::test_delete_all_archived PASSED    [ 45%]
+tests/test_deletion.py::TestDeletion::test_delete_batch PASSED           [ 48%]
+tests/test_deletion.py::TestDeletion::test_delete_ledger PASSED          [ 51%]
+tests/test_parser.py::TestParser::test_amount_overflow_error PASSED      [ 54%]
+tests/test_parser.py::TestParser::test_animal_each PASSED                [ 56%]
+tests/test_parser.py::TestParser::test_decimal_amount PASSED             [ 59%]
+tests/test_parser.py::TestParser::test_decimal_amount_is_exact 
+tests/test_parser.py::TestParser::test_decimal_amount_is_exact PASSED    [ 62%]
+tests/test_parser.py::TestParser::test_duplicate_warning PASSED          [ 64%]
+tests/test_parser.py::TestParser::test_invalid_number_error PASSED       [ 67%]
+tests/test_parser.py::TestParser::test_mixed_error PASSED                [ 70%]
+tests/test_parser.py::TestParser::test_more_than_two_decimal_places_error PASSED [ 72%]
+tests/test_parser.py::TestParser::test_multiline PASSED                  [ 75%]
+tests/test_parser.py::TestParser::test_multiple_animals PASSED           [ 78%]
+tests/test_parser.py::TestParser::test_multiple_numbers_with_each PASSED [ 81%]
+tests/test_parser.py::TestParser::test_multiple_without_each_error PASSED [ 83%]
+tests/test_parser.py::TestParser::test_no_amount_error PASSED            [ 86%]
+tests/test_parser.py::TestParser::test_single_number PASSED              [ 89%]
+tests/test_rollover.py::TestRollover::test_multiple_rollover_prevention PASSED [ 91%]
+tests/test_rollover.py::TestRollover::test_no_rollover_same_day PASSED   [ 94%]
+tests/test_rollover.py::TestRollover::test_rollover_next_day PASSED      [ 97%]
+tests/test_rollover.py::TestRollover::test_startup_archives_stale_ledger_with_total PASSED [100%]
+
+==================== 37 passed, 3 subtests passed in 0.79s ====================
+
+
+================================================================================
+测试通过情况
+================================================================================
+总计: 37 项测试
+
+测试项目与结果以上方pytest实际输出为准。
+
+================================================================================
+测试总结
+================================================================================
+[SUCCESS] 所有测试通过！
+
+项目已准备就绪，可以打包发布。
+
+================================================================================
+下一步操作
+================================================================================
+1. 运行 build_windows.bat 打包 Windows 版本
+2. 在 macOS 上运行 ./build_macos.sh 打包 macOS 版本
+3. 手动测试打包后的应用程序
+4. 在断网环境下测试所有功能
+5. 生成 SHA-256 校验值

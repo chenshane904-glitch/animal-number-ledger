@@ -1,0 +1,595 @@
+"""主窗口"""
+import json
+from datetime import datetime
+from pathlib import Path
+import customtkinter as ctk
+from tkinter import messagebox, filedialog
+from typing import Optional
+from database import Database, DatabaseError
+from daily_rollover import DailyRollover
+from parser import InstructionParser, ParserError
+from calculator import Calculator
+from backup import BackupManager, BackupError
+from constants import MIN_NUMBER, MAX_NUMBER, AMOUNT_MULTIPLIER
+from ui.history_window import HistoryWindow
+from ui.mapping_window import MappingWindow
+
+
+class MainWindow(ctk.CTk):
+    """主窗口"""
+
+    def __init__(self, db: Database, rollover: DailyRollover, app_data_dir: Path):
+        super().__init__()
+
+        self.db = db
+        self.rollover = rollover
+        self.app_data_dir = app_data_dir
+        self.backup_manager = BackupManager(db)
+
+        # 当前账本
+        self.current_ledger = None
+        self.current_totals = {}
+        self.current_sources = {}
+
+        # 设置窗口
+        self.title("十二动物号码归纳器 v1.1.0")
+        self.geometry("1200x800")
+
+        # 初始化界面
+        self._setup_ui()
+
+        # 启动时先结算跨日遗留账本，再加载今天账本。
+        startup_settlements = self.rollover.initialize()
+
+        # 加载当前账本
+        self._load_current_ledger()
+
+        if startup_settlements:
+            _, ledger_date, total = startup_settlements[-1]
+            self._set_last_settlement(ledger_date, total)
+            settlement_lines = [
+                f"{date}：{amount / AMOUNT_MULTIPLIER:.2f}"
+                for _, date, amount in startup_settlements
+            ]
+            self.after(
+                200,
+                lambda: messagebox.showinfo(
+                    "启动结算完成",
+                    "已自动结算跨日账本：\n\n" + '\n'.join(settlement_lines)
+                )
+            )
+        else:
+            self._load_last_settlement_display()
+
+        # 启动定时检查跨日
+        self._schedule_rollover_check()
+
+    def _setup_ui(self):
+        """设置界面"""
+        # 顶部信息栏
+        self.info_frame = ctk.CTkFrame(self)
+        self.info_frame.pack(fill='x', padx=10, pady=5)
+
+        self.date_label = ctk.CTkLabel(self.info_frame, text="", font=("Arial", 14, "bold"))
+        self.date_label.pack(side='left', padx=10)
+
+        self.ledger_label = ctk.CTkLabel(self.info_frame, text="", font=("Arial", 14))
+        self.ledger_label.pack(side='left', padx=10)
+
+        self.settlement_label = ctk.CTkLabel(
+            self.info_frame,
+            text="上次结算总账金额: --",
+            font=("Arial", 14, "bold")
+        )
+        self.settlement_label.pack(side='right', padx=10)
+
+        # 主容器
+        self.main_container = ctk.CTkFrame(self)
+        self.main_container.pack(fill='both', expand=True, padx=10, pady=5)
+
+        # 左侧：输入区域
+        self.left_frame = ctk.CTkFrame(self.main_container)
+        self.left_frame.pack(side='left', fill='both', expand=True, padx=(0, 5))
+
+        # 输入框
+        input_label = ctk.CTkLabel(self.left_frame, text="输入指令（每行一条）：", font=("Arial", 12))
+        input_label.pack(anchor='w', padx=10, pady=(10, 5))
+
+        self.input_text = ctk.CTkTextbox(self.left_frame, height=150, font=("Consolas", 11))
+        self.input_text.pack(fill='x', padx=10, pady=5)
+        self.input_text.bind('<KeyRelease>', lambda e: self._on_input_change())
+
+        # 解析预览
+        preview_label = ctk.CTkLabel(self.left_frame, text="解析预览：", font=("Arial", 12))
+        preview_label.pack(anchor='w', padx=10, pady=(10, 5))
+
+        self.preview_text = ctk.CTkTextbox(self.left_frame, height=100, font=("Consolas", 10))
+        self.preview_text.pack(fill='x', padx=10, pady=5)
+        self.preview_text.configure(state='disabled')
+
+        # 本次计算
+        calc_label = ctk.CTkLabel(self.left_frame, text="本次计算：", font=("Arial", 12))
+        calc_label.pack(anchor='w', padx=10, pady=(10, 5))
+
+        self.calc_text = ctk.CTkTextbox(self.left_frame, height=100, font=("Consolas", 13, "bold"))
+        self.calc_text.pack(fill='x', padx=10, pady=5)
+        self.calc_text.configure(state='disabled')
+
+        # 按钮区域
+        self.button_frame = ctk.CTkFrame(self.left_frame)
+        self.button_frame.pack(fill='x', padx=10, pady=10)
+
+        self.confirm_btn = ctk.CTkButton(
+            self.button_frame,
+            text="确认追加",
+            command=self._confirm_add,
+            state='disabled'
+        )
+        self.confirm_btn.pack(side='left', padx=5)
+
+        self.undo_btn = ctk.CTkButton(
+            self.button_frame,
+            text="撤销最近一次",
+            command=self._undo_last
+        )
+        self.undo_btn.pack(side='left', padx=5)
+
+        self.clear_input_btn = ctk.CTkButton(
+            self.button_frame,
+            text="清空输入",
+            command=self._clear_input
+        )
+        self.clear_input_btn.pack(side='left', padx=5)
+
+        self.clear_today_btn = ctk.CTkButton(
+            self.button_frame,
+            text="结算并清空今日",
+            command=self._clear_today
+        )
+        self.clear_today_btn.pack(side='left', padx=5)
+
+        # 功能按钮
+        self.func_frame = ctk.CTkFrame(self.left_frame)
+        self.func_frame.pack(fill='x', padx=10, pady=5)
+
+        self.history_btn = ctk.CTkButton(
+            self.func_frame,
+            text="历史记录",
+            command=self._open_history
+        )
+        self.history_btn.pack(side='left', padx=5)
+
+        self.mapping_btn = ctk.CTkButton(
+            self.func_frame,
+            text="动物号码表",
+            command=self._open_mapping
+        )
+        self.mapping_btn.pack(side='left', padx=5)
+
+        self.export_btn = ctk.CTkButton(
+            self.func_frame,
+            text="导出备份",
+            command=self._export_backup
+        )
+        self.export_btn.pack(side='left', padx=5)
+
+        self.import_btn = ctk.CTkButton(
+            self.func_frame,
+            text="恢复备份",
+            command=self._import_backup
+        )
+        self.import_btn.pack(side='left', padx=5)
+
+        self.test_btn = ctk.CTkButton(
+            self.func_frame,
+            text="运行自检",
+            command=self._run_selftest
+        )
+        self.test_btn.pack(side='left', padx=5)
+
+        # 右侧：结果显示
+        self.right_frame = ctk.CTkFrame(self.main_container)
+        self.right_frame.pack(side='right', fill='both', expand=True, padx=(5, 0))
+
+        # 统计信息
+        stats_frame = ctk.CTkFrame(self.right_frame)
+        stats_frame.pack(fill='x', padx=10, pady=10)
+
+        self.total_label = ctk.CTkLabel(stats_frame, text="今日总数: 0.00", font=("Arial", 16, "bold"))
+        self.total_label.pack(side='left', padx=10)
+
+        self.count_label = ctk.CTkLabel(stats_frame, text="非零号码: 0", font=("Arial", 14))
+        self.count_label.pack(side='left', padx=10)
+
+        # 号码结果区域（滚动）
+        results_label = ctk.CTkLabel(self.right_frame, text="01-49结果：", font=("Arial", 12))
+        results_label.pack(anchor='w', padx=10, pady=(5, 5))
+
+        self.results_scroll = ctk.CTkScrollableFrame(self.right_frame, height=600)
+        self.results_scroll.pack(fill='both', expand=True, padx=10, pady=5)
+
+        # 创建49个号码显示框
+        self.number_labels = {}
+        self.number_frames = {}
+        for i in range(MIN_NUMBER, MAX_NUMBER + 1):
+            frame = ctk.CTkFrame(self.results_scroll)
+            frame.pack(fill='x', pady=2)
+
+            num_label = ctk.CTkLabel(frame, text=f"{i:02d}", width=40, font=("Arial", 14, "bold"))
+            num_label.pack(side='left', padx=5)
+
+            # 创建金额标签时不设置颜色，使用默认
+            amount_label = ctk.CTkLabel(frame, text="0.00", width=100, anchor='e', font=("Consolas", 16, "bold"))
+            amount_label.pack(side='left', padx=5)
+
+            # 点击显示来源
+            frame.bind('<Button-1>', lambda e, num=i: self._show_sources(num))
+            num_label.bind('<Button-1>', lambda e, num=i: self._show_sources(num))
+            amount_label.bind('<Button-1>', lambda e, num=i: self._show_sources(num))
+
+            self.number_labels[i] = amount_label
+            self.number_frames[i] = frame
+
+    def _load_current_ledger(self):
+        """加载当前账本"""
+        current_date = self.rollover.get_current_date_str()
+        self.current_ledger = self.db.get_or_create_active_ledger(current_date)
+
+        # 更新显示
+        self._update_display()
+
+    def _set_last_settlement(self, ledger_date: str, total_integer: int):
+        """更新最近一次结算金额显示。"""
+        self.settlement_label.configure(
+            text=(
+                f"上次结算 ({ledger_date}) 总账金额: "
+                f"{total_integer / AMOUNT_MULTIPLIER:.2f}"
+            )
+        )
+
+    def _load_last_settlement_display(self):
+        """从历史账本加载最近一次结算金额。"""
+        for ledger in self.db.get_all_ledgers():
+            if ledger.status == 'archived' and ledger.settled_total_integer is not None:
+                self._set_last_settlement(
+                    ledger.ledger_date,
+                    ledger.settled_total_integer
+                )
+                return
+        self.settlement_label.configure(text="上次结算总账金额: --")
+
+    def _update_display(self):
+        """更新显示"""
+        # 更新日期和账本信息
+        self.date_label.configure(text=f"日期: {self.current_ledger.ledger_date}")
+        self.ledger_label.configure(text=f"账本编号: {self.current_ledger.sequence_number}")
+
+        # 获取当前累计
+        self.current_totals = self.db.get_ledger_totals(self.current_ledger.id)
+        self.current_sources = self.db.get_ledger_sources(self.current_ledger.id)
+
+        # 找出最大金额（只考虑大于0的总数）
+        max_amount_int = 0
+        for amount_int in self.current_totals.values():
+            if amount_int > max_amount_int:
+                max_amount_int = amount_int
+
+        # 更新号码显示
+        total = 0
+        non_zero = 0
+
+        for i in range(MIN_NUMBER, MAX_NUMBER + 1):
+            amount_int = self.current_totals.get(i, 0)
+            amount = amount_int / AMOUNT_MULTIPLIER
+
+            # 判断是否为最大总数（必须大于0）
+            is_max = amount_int > 0 and amount_int == max_amount_int
+
+            if is_max:
+                # 最大总数：红色字体 + 加粗
+                self.number_labels[i].configure(
+                    text=f"{amount:.2f}",
+                    text_color="red",
+                    font=("Consolas", 16, "bold")
+                )
+                # 红色边框 + 淡红背景
+                self.number_frames[i].configure(
+                    border_width=3,
+                    border_color="red",
+                    fg_color="#FFE5E5"
+                )
+            else:
+                # 普通显示
+                self.number_labels[i].configure(
+                    text=f"{amount:.2f}",
+                    text_color=("gray10", "gray90"),  # 适配深浅色模式
+                    font=("Consolas", 14)
+                )
+                # 无边框
+                self.number_frames[i].configure(
+                    border_width=0,
+                    fg_color="transparent"
+                )
+
+            total += amount_int
+            if amount_int > 0:
+                non_zero += 1
+
+        # 更新统计
+        self.total_label.configure(text=f"今日总数: {total / AMOUNT_MULTIPLIER:.2f}")
+        self.count_label.configure(text=f"非零号码: {non_zero}")
+
+    def _on_input_change(self):
+        """输入变化时解析预览"""
+        input_text = self.input_text.get("1.0", "end-1c").strip()
+
+        if not input_text:
+            self._clear_preview()
+            self.confirm_btn.configure(state='disabled')
+            return
+
+        # 解析
+        try:
+            animal_mapping = self.db.get_animal_mapping()
+            parser = InstructionParser(animal_mapping)
+            instructions = parser.parse_input(input_text)
+
+            # 显示解析预览
+            preview_lines = []
+            has_warning = False
+            for inst in instructions:
+                if inst.target_type == 'number':
+                    targets_str = ', '.join(inst.targets)
+                else:
+                    targets_str = ', '.join(inst.targets) + ' (各号)'
+
+                amount = inst.amount_integer / AMOUNT_MULTIPLIER
+                line = f"第{inst.source_line}行: {targets_str} → {amount:.2f}"
+
+                if inst.warning:
+                    line += f" ⚠️ {inst.warning}"
+                    has_warning = True
+
+                preview_lines.append(line)
+
+            self.preview_text.configure(state='normal')
+            self.preview_text.delete("1.0", "end")
+            self.preview_text.insert("1.0", '\n'.join(preview_lines))
+            self.preview_text.configure(state='disabled')
+
+            # 计算本次结果
+            calculator = Calculator(animal_mapping)
+            result = calculator.calculate(instructions, {i: 0 for i in range(MIN_NUMBER, MAX_NUMBER + 1)})
+
+            calc_lines = []
+            for i in range(MIN_NUMBER, MAX_NUMBER + 1):
+                if result.number_amounts[i] > 0:
+                    amount = result.number_amounts[i] / AMOUNT_MULTIPLIER
+                    calc_lines.append(f"{i:02d}: {amount:.2f}")
+
+            total = result.total_amount / AMOUNT_MULTIPLIER
+            calc_lines.append(f"\n本次总数: {total:.2f}")
+            calc_lines.append(f"涉及号码: {result.non_zero_count}")
+
+            self.calc_text.configure(state='normal')
+            self.calc_text.delete("1.0", "end")
+            self.calc_text.insert("1.0", '\n'.join(calc_lines))
+            self.calc_text.configure(state='disabled')
+
+            # 启用确认按钮
+            self.confirm_btn.configure(state='normal')
+
+        except ParserError as e:
+            # 显示错误
+            self.preview_text.configure(state='normal')
+            self.preview_text.delete("1.0", "end")
+            self.preview_text.insert("1.0", f"❌ 解析错误：\n{str(e)}")
+            self.preview_text.configure(state='disabled')
+
+            self._clear_calc()
+            self.confirm_btn.configure(state='disabled')
+
+    def _clear_preview(self):
+        """清空预览"""
+        self.preview_text.configure(state='normal')
+        self.preview_text.delete("1.0", "end")
+        self.preview_text.configure(state='disabled')
+
+    def _clear_calc(self):
+        """清空计算"""
+        self.calc_text.configure(state='normal')
+        self.calc_text.delete("1.0", "end")
+        self.calc_text.configure(state='disabled')
+
+    def _confirm_add(self):
+        """确认追加"""
+        input_text = self.input_text.get("1.0", "end-1c").strip()
+
+        try:
+            # 检查跨日
+            rolled_over, new_date = self.rollover.check_and_rollover(self.current_ledger.id)
+            if rolled_over:
+                self._set_last_settlement(
+                    self.rollover.last_settled_ledger_date,
+                    self.rollover.last_settlement_total
+                )
+                messagebox.showinfo(
+                    "跨日结算",
+                    f"已结算{self.rollover.last_settled_ledger_date}账本\n"
+                    f"总账总金额：{self.rollover.last_settlement_total / AMOUNT_MULTIPLIER:.2f}\n\n"
+                    f"已新建{new_date}账本"
+                )
+                self._load_current_ledger()
+
+            # 解析
+            animal_mapping = self.db.get_animal_mapping()
+            parser = InstructionParser(animal_mapping)
+            instructions = parser.parse_input(input_text)
+
+            # 计算
+            calculator = Calculator(animal_mapping)
+            result = calculator.calculate(instructions, self.current_totals)
+
+            # 保存批次
+            from models import Batch
+            batch = Batch(
+                raw_input=input_text,
+                total_before=sum(self.current_totals.values()),
+                total_after=result.total_amount,
+                mapping_snapshot=json.dumps(animal_mapping, ensure_ascii=False),
+                instructions=instructions
+            )
+
+            self.db.add_batch_with_allocations(
+                self.current_ledger.id,
+                batch,
+                animal_mapping
+            )
+
+            # 清空输入
+            self.input_text.delete("1.0", "end")
+            self._clear_preview()
+            self._clear_calc()
+
+            # 刷新显示
+            self._update_display()
+
+            messagebox.showinfo("成功", "已追加到账本")
+
+        except Exception as e:
+            messagebox.showerror("错误", f"追加失败：{str(e)}")
+
+    def _undo_last(self):
+        """撤销最近一次"""
+        last_batch_id = self.db.get_last_batch_id(self.current_ledger.id)
+        if not last_batch_id:
+            messagebox.showinfo("提示", "当前账本没有记录")
+            return
+
+        if messagebox.askyesno("确认", "确定要撤销最近一次追加吗？"):
+            try:
+                self.db.delete_batch(last_batch_id)
+                self._update_display()
+                messagebox.showinfo("成功", "已撤销")
+            except DatabaseError as e:
+                messagebox.showerror("错误", f"撤销失败：{str(e)}")
+
+    def _clear_input(self):
+        """清空输入"""
+        self.input_text.delete("1.0", "end")
+        self._clear_preview()
+        self._clear_calc()
+        self.confirm_btn.configure(state='disabled')
+
+    def _clear_today(self):
+        """清空今日累计"""
+        if messagebox.askyesno(
+            "确认结算",
+            "确定要结算当前账本并清空今日累计吗？\n"
+            "结算结果会保存在历史记录中。"
+        ):
+            try:
+                # 归档当前账本并创建新账本
+                settled_date = self.current_ledger.ledger_date
+                settled_total = self.db.archive_ledger(self.current_ledger.id)
+                self.rollover.last_settled_ledger_date = settled_date
+                self.rollover.last_settlement_total = settled_total
+                self._set_last_settlement(settled_date, settled_total)
+                self._load_current_ledger()
+                messagebox.showinfo(
+                    "结算完成",
+                    f"本次总账总金额：{settled_total / AMOUNT_MULTIPLIER:.2f}\n"
+                    "已开启新的今日账本"
+                )
+            except DatabaseError as e:
+                messagebox.showerror("错误", f"清空失败：{str(e)}")
+
+    def _show_sources(self, number: int):
+        """显示号码来源"""
+        sources = self.current_sources.get(number, [])
+        if not sources:
+            messagebox.showinfo("来源", f"号码 {number:02d} 暂无来源")
+            return
+
+        source_text = f"号码 {number:02d} 的来源：\n\n" + '\n'.join(f"• {s}" for s in sources)
+        messagebox.showinfo("来源", source_text)
+
+    def _open_history(self):
+        """打开历史记录"""
+        HistoryWindow(self, self.db, self.backup_manager, self.current_ledger.id)
+
+    def _open_mapping(self):
+        """打开动物号码表设置"""
+        MappingWindow(self, self.db, self._update_display)
+
+    def _export_backup(self):
+        """导出备份"""
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            initialfile=f"backup_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+        )
+
+        if file_path:
+            try:
+                self.backup_manager.export_to_json(file_path)
+                messagebox.showinfo("成功", f"已导出备份到：\n{file_path}")
+            except BackupError as e:
+                messagebox.showerror("错误", f"导出失败：{str(e)}")
+
+    def _import_backup(self):
+        """恢复备份"""
+        if not messagebox.askyesno("警告", "恢复备份将清空当前所有数据！\n请确认已备份当前数据。\n\n是否继续？"):
+            return
+
+        file_path = filedialog.askopenfilename(
+            filetypes=[("JSON files", "*.json"), ("All files", "*.*")]
+        )
+
+        if file_path:
+            try:
+                safety_path = self.app_data_dir / (
+                    f"pre_restore_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+                )
+                self.backup_manager.export_to_json(str(safety_path))
+                self.backup_manager.import_from_json(file_path)
+                settlements = self.rollover.initialize()
+                self._load_current_ledger()
+                if settlements:
+                    _, ledger_date, total = settlements[-1]
+                    self._set_last_settlement(ledger_date, total)
+                else:
+                    self._load_last_settlement_display()
+                messagebox.showinfo(
+                    "成功",
+                    "备份恢复成功！\n\n"
+                    f"恢复前安全备份已保存到：\n{safety_path}"
+                )
+            except (BackupError, DatabaseError) as e:
+                messagebox.showerror("错误", f"恢复失败：{str(e)}")
+
+    def _run_selftest(self):
+        """运行自检"""
+        from tests.test_runner import run_safe_tests
+        result = run_safe_tests()
+        messagebox.showinfo("自检结果", result)
+
+    def _schedule_rollover_check(self):
+        """定时检查跨日"""
+        # 每分钟检查一次
+        rolled_over, new_date = self.rollover.check_and_rollover(self.current_ledger.id)
+        if rolled_over:
+            self._set_last_settlement(
+                self.rollover.last_settled_ledger_date,
+                self.rollover.last_settlement_total
+            )
+            messagebox.showinfo(
+                "跨日结算",
+                f"已结算{self.rollover.last_settled_ledger_date}账本\n"
+                f"总账总金额：{self.rollover.last_settlement_total / AMOUNT_MULTIPLIER:.2f}\n\n"
+                f"已新建{new_date}账本"
+            )
+            self._load_current_ledger()
+
+        # 60秒后再次检查
+        self.after(60000, self._schedule_rollover_check)
