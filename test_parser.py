@@ -1,22 +1,27 @@
-"""测试解析器"""
+﻿import sys
+sys.path.insert(0, "C:/Users/2SS2/animal-number-ledger")
+
 from parser import InstructionParser
 from constants import DEFAULT_ANIMAL_MAPPING
 
-# 创建解析器
 parser = InstructionParser(DEFAULT_ANIMAL_MAPPING)
 
-# 测试输入
-test_inputs = [
-    "01.32.45.41.01.01各30斤",
-    "01.32.45.41.01.01各30",
-    "1,32,45,41,1各30",
-]
+test_input = "1.2.3各0.50"
+print(f"测试输入: {test_input}")
+print()
 
-for test in test_inputs:
-    print(f"\n测试输入: {test}")
-    try:
-        instructions = parser.parse_input(test)
-        for inst in instructions:
-            print(f"  ✓ 成功: {inst.targets} -> {inst.amount_integer / 100:.2f}")
-    except Exception as e:
-        print(f"  ✗ 错误: {e}")
+try:
+    # 测试解析
+    instructions = parser.parse_input(test_input)
+    print("✅ 解析成功！")
+    print()
+    for inst in instructions:
+        print(f"目标类型: {inst.target_type}")
+        print(f"目标: {inst.targets}")
+        print(f"金额: {inst.amount}")
+        print(f"是否各数: {inst.is_each}")
+except Exception as e:
+    print(f"❌ 解析失败: {e}")
+    print()
+    import traceback
+    traceback.print_exc()

@@ -274,42 +274,77 @@ class MainWindow(ctk.CTk):
             if amount_int > max_amount_int:
                 max_amount_int = amount_int
 
-        # 更新号码显示
+        # 更新号码显示（按金额排序）
         total = 0
         non_zero = 0
 
+        # 创建排序列表：(号码, 金额整数)
+        sorted_numbers = []
         for i in range(MIN_NUMBER, MAX_NUMBER + 1):
             amount_int = self.current_totals.get(i, 0)
+            sorted_numbers.append((i, amount_int))
+
+        # 排序：金额从大到小，金额相同按号码从小到大
+        sorted_numbers.sort(key=lambda x: (-x[1], x[0]))
+
+        # 清空当前显示
+        for widget in self.results_scroll.winfo_children():
+            widget.destroy()
+
+        # 重新创建号码标签（按排序顺序）
+        self.number_labels = {}
+        self.number_frames = {}
+
+        for num, amount_int in sorted_numbers:
             amount = amount_int / AMOUNT_MULTIPLIER
 
             # 判断是否为最大总数（必须大于0）
             is_max = amount_int > 0 and amount_int == max_amount_int
 
+            # 创建框架
+            frame = ctk.CTkFrame(self.results_scroll)
+            frame.pack(fill='x', pady=2)
+
+            # 号码标签
+            num_label = ctk.CTkLabel(frame, text=f"{num:02d}", width=40, font=("Arial", 14, "bold"))
+            num_label.pack(side='left', padx=5)
+
+            # 金额标签
             if is_max:
                 # 最大总数：红色字体 + 加粗
-                self.number_labels[i].configure(
+                amount_label = ctk.CTkLabel(
+                    frame,
                     text=f"{amount:.2f}",
-                    text_color="red",
-                    font=("Consolas", 16, "bold")
+                    width=100,
+                    anchor='e',
+                    font=("Consolas", 16, "bold"),
+                    text_color="red"
                 )
                 # 红色边框 + 淡红背景
-                self.number_frames[i].configure(
+                frame.configure(
                     border_width=3,
                     border_color="red",
                     fg_color="#FFE5E5"
                 )
             else:
                 # 普通显示
-                self.number_labels[i].configure(
+                amount_label = ctk.CTkLabel(
+                    frame,
                     text=f"{amount:.2f}",
-                    text_color=("gray10", "gray90"),  # 适配深浅色模式
+                    width=100,
+                    anchor='e',
                     font=("Consolas", 14)
                 )
-                # 无边框
-                self.number_frames[i].configure(
-                    border_width=0,
-                    fg_color="transparent"
-                )
+
+            amount_label.pack(side='left', padx=5)
+
+            # 点击显示来源
+            frame.bind('<Button-1>', lambda e, n=num: self._show_sources(n))
+            num_label.bind('<Button-1>', lambda e, n=num: self._show_sources(n))
+            amount_label.bind('<Button-1>', lambda e, n=num: self._show_sources(n))
+
+            self.number_labels[num] = amount_label
+            self.number_frames[num] = frame
 
             total += amount_int
             if amount_int > 0:

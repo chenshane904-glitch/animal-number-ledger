@@ -171,14 +171,44 @@ class InstructionParser:
         return instruction
 
     def _split_targets(self, text: str) -> List[str]:
-        """分割目标字符串"""
-        # 替换所有分隔符为统一的分隔符
-        for sep in SEPARATORS:
-            text = text.replace(sep, '|')
+        """分割目标字符串
 
-        # 分割并过滤空字符串
-        parts = [p.strip() for p in text.split('|') if p.strip()]
-        return parts
+        支持两种方式：
+        1. 有分隔符：用分隔符分割
+        2. 无分隔符：尝试逐个字符识别动物
+        """
+        # 先尝试用分隔符分割
+        temp_text = text
+        for sep in SEPARATORS:
+            temp_text = temp_text.replace(sep, '|')
+
+        parts = [p.strip() for p in temp_text.split('|') if p.strip()]
+
+        # 如果分割成功（有多个部分或单个数字），直接返回
+        if len(parts) > 1:
+            return parts
+        if len(parts) == 1 and parts[0].isdigit():
+            return parts
+
+        # 如果只有一个部分且不是纯数字，尝试拆分动物名称
+        if len(parts) == 1:
+            single_part = parts[0]
+
+            # 检查是否全是动物名称（连续的单字符动物）
+            animals_found = []
+            for char in single_part:
+                if char in self.animals:
+                    animals_found.append(char)
+                else:
+                    # 包含非动物字符，按原样返回
+                    return parts
+
+            # 如果全是动物名称，返回拆分结果
+            if animals_found:
+                return animals_found
+
+        # 默认返回原始分割结果
+        return parts if parts else []
 
     def _classify_targets(self, targets_raw: List[str], original_line: str) -> Tuple[str, List[str]]:
         """
