@@ -32,7 +32,7 @@ class MainWindow(ctk.CTk):
         self.current_sources = {}
 
         # 设置窗口
-        self.title("十二动物号码归纳器 v1.2.1")
+        self.title("十二动物号码归纳器 v1.2.2")
         self.geometry("1200x800")
 
         # 初始化界面
