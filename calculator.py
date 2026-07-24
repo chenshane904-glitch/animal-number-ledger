@@ -76,6 +76,43 @@ class Calculator:
                         allocations.append(allocation)
                         sources[num].append(instruction.original_text)
 
+            elif instruction.target_type == 'mixed':
+                # 混合模式：同时包含动物和号码
+                for target in instruction.targets:
+                    # 判断是动物还是号码
+                    if target in self.animal_mapping:
+                        # 是动物，分配到该动物的所有号码
+                        numbers = self.animal_mapping.get(target, [])
+                        for num in numbers:
+                            number_amounts[num] += instruction.amount_integer
+
+                            allocation = Allocation(
+                                number=num,
+                                animal=target,
+                                amount_integer=instruction.amount_integer,
+                                instruction_id=instruction.id
+                            )
+                            allocations.append(allocation)
+                            sources[num].append(instruction.original_text)
+                    else:
+                        # 是号码，直接分配
+                        try:
+                            num = int(target)
+                            if MIN_NUMBER <= num <= MAX_NUMBER:
+                                number_amounts[num] += instruction.amount_integer
+
+                                allocation = Allocation(
+                                    number=num,
+                                    animal=self.number_to_animal.get(num, ''),
+                                    amount_integer=instruction.amount_integer,
+                                    instruction_id=instruction.id
+                                )
+                                allocations.append(allocation)
+                                sources[num].append(instruction.original_text)
+                        except ValueError:
+                            # 无法转换为数字，忽略
+                            pass
+
         # 计算总数和非零数量
         total_amount = sum(number_amounts.values())
         non_zero_count = sum(1 for amount in number_amounts.values() if amount > 0)

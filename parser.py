@@ -44,20 +44,25 @@ class InstructionParser:
         return instructions
 
     def _parse_line(self, line: str, line_num: int) -> Instruction:
-        """智能解析单行 - 支持数字和动物"""
+        """智能解析单行 - 同时支持数字和动物（混合）"""
         original = line
 
         # 标准化：全角转半角
         normalized = self._normalize_punctuation(line)
 
-        # 提取所有数字（包括小数）
-        all_numbers = re.findall(r'\d+\.?\d*', normalized)
+        # 先查找金额（最后一个可能带小数点的数字）
+        # 从后往前找第一个数字序列（可能是 "30" 或 "0.50"）
+        amount_match = re.search(r'(\d+(?:\.\d+)?)\s*(?:斤|元|块|￥|\$)?$', normalized)
+        if not amount_match:
+            raise ParserError(f"未找到金额: {line}")
 
-        if not all_numbers:
-            raise ParserError(f"未找到任何数字: {line}")
+        amount_str = amount_match.group(1)
 
-        # 最后一个数字作为金额
-        amount_str = all_numbers[-1]
+        # 移除金额部分，剩余部分提取所有单独的数字
+        content_before_amount = normalized[:amount_match.start()].strip()
+
+        # 提取所有单独的数字（不匹配小数）
+        all_numbers = re.findall(r'\d+', content_before_amount)
 
         # 解析金额
         try:
@@ -70,80 +75,75 @@ class InstructionParser:
         except (InvalidOperation, ValueError):
             raise ParserError(f"无效的金额格式: {amount_str}")
 
-        # 移除金额部分，剩余部分尝试识别号码或动物
-        # 找到金额在原文中的位置
+        # 移除金额部分，剩余部分尝试识别号码和动物
         amount_pos = normalized.rfind(amount_str)
         target_part = normalized[:amount_pos].strip()
 
         # 移除常见的关键词
-        for keyword in EACH_SYNONYMS + ['元', '￥', '$', '号', '数']:
+        for keyword in EACH_SYNONYMS + ['元', '￥', '$', '号', '数', '斤']:
             target_part = target_part.replace(keyword, ' ')
 
         # 清理空白
         target_part = ' '.join(target_part.split())
 
-        # 尝试提取动物名称
+        # 同时提取动物和号码
         animals_found = []
         for char in target_part:
             if char in self.animals:
                 animals_found.append(char)
 
-        # 如果找到动物，使用动物
-        if animals_found:
-            # 去重但保持顺序
-            targets = list(dict.fromkeys(animals_found))
+        # 提取号码（除去金额的其他数字）
+        number_strings = all_numbers[:-1]
+        numbers = []
+        for num_str in number_strings:
+            # 移除小数点
+            num_str = num_str.replace('.', '')
+            if not num_str:
+                continue
+            try:
+                num = int(num_str)
+                if MIN_NUMBER <= num <= MAX_NUMBER:
+                    numbers.append(str(num))
+            except ValueError:
+                pass
+
+        # 合并动物和号码
+        all_targets = []
+        target_type = None
+
+        # 去重但保持顺序
+        animals_unique = list(dict.fromkeys(animals_found))
+        numbers_unique = list(dict.fromkeys(numbers))
+
+        if animals_unique and numbers_unique:
+            # 同时有动物和号码：合并
+            all_targets = animals_unique + numbers_unique
+            target_type = 'mixed'  # 混合类型
+        elif animals_unique:
+            # 只有动物
+            all_targets = animals_unique
             target_type = 'animal'
-            warning = None
-
-            # 检查重复
-            if len(animals_found) != len(targets):
-                duplicates = [a for a in set(animals_found) if animals_found.count(a) > 1]
-                warning = f"同一行重复动物: {', '.join(duplicates)}"
-        else:
-            # 没有动物，尝试提取号码
-            number_strings = all_numbers[:-1]  # 除去金额的其他数字
-
-            if not number_strings:
-                raise ParserError(f"未找到号码或动物: {line}")
-
-            # 解析号码
-            numbers = []
-            for num_str in number_strings:
-                # 移除小数点（号码不应该有小数）
-                num_str = num_str.replace('.', '')
-
-                if not num_str:
-                    continue
-
-                try:
-                    num = int(num_str)
-                    if MIN_NUMBER <= num <= MAX_NUMBER:
-                        numbers.append(str(num))
-                    # 号码超出范围，忽略（宽容处理）
-                except ValueError:
-                    # 无法转换为整数，忽略
-                    pass
-
-            if not numbers:
-                raise ParserError(f"未找到有效号码（1-49范围内）: {line}")
-
-            targets = numbers
+        elif numbers_unique:
+            # 只有号码
+            all_targets = numbers_unique
             target_type = 'number'
-            warning = None
+        else:
+            raise ParserError(f"未找到号码或动物: {line}")
 
-            # 检查重复
-            if len(numbers) != len(set(numbers)):
-                seen = set()
-                duplicates = []
-                for n in numbers:
-                    if n in seen:
-                        duplicates.append(n)
-                    seen.add(n)
-                warning = f"同一行重复号码: {', '.join(duplicates)}"
-                targets = list(dict.fromkeys(numbers))  # 去重但保持顺序
+        # 检查重复
+        warning = None
+        if animals_found and len(animals_found) != len(animals_unique):
+            duplicates = [a for a in set(animals_found) if animals_found.count(a) > 1]
+            warning = f"重复动物: {', '.join(duplicates)}"
+        if numbers and len(numbers) != len(numbers_unique):
+            duplicates = [n for n in set(numbers) if numbers.count(n) > 1]
+            if warning:
+                warning += f"; 重复号码: {', '.join(duplicates)}"
+            else:
+                warning = f"重复号码: {', '.join(duplicates)}"
 
         # 检测是否是"各数"模式
-        is_each = any(keyword in normalized for keyword in EACH_SYNONYMS) or len(targets) > 1
+        is_each = any(keyword in normalized for keyword in EACH_SYNONYMS) or len(all_targets) > 1
 
         # 创建指令
         instruction = Instruction(
@@ -151,7 +151,7 @@ class InstructionParser:
             original_text=original,
             normalized_text=normalized,
             target_type=target_type,
-            targets=targets,
+            targets=all_targets,
             amount_integer=amount_integer,
             warning=warning
         )
