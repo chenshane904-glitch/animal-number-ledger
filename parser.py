@@ -63,8 +63,49 @@ class InstructionParser:
         # 预处理：标准化标点符号和数字
         normalized = self._normalize_punctuation(line)
 
-        # 提取金额（必须在末尾）
-        amount_match = re.search(r'(?<![\d.])(\d+(?:\.\d{1,2})?)斤?$', normalized)
+        # 第一步：先找关键词位置（各、个、元等）
+        # 这样可以避免把号码中的小数点误认为金额小数点
+        keyword_pos = -1
+        found_keyword = None
+        is_each = False
+
+        for synonym in EACH_SYNONYMS:
+            pos = normalized.find(synonym)
+            if pos != -1:
+                keyword_pos = pos
+                found_keyword = synonym
+                is_each = True
+                break
+
+        # 如果没有找到关键词，尝试找"元"或"￥"
+        if keyword_pos == -1:
+            for keyword in ['元', '￥', '$']:
+                pos = normalized.find(keyword)
+                if pos != -1:
+                    keyword_pos = pos
+                    found_keyword = keyword
+                    break
+
+        # 第二步：根据关键词分割号码部分和金额部分
+        if keyword_pos != -1:
+            # 关键词之前是号码部分
+            target_part = normalized[:keyword_pos].strip()
+            # 关键词之后是金额部分
+            amount_part = normalized[keyword_pos + len(found_keyword):].strip()
+        else:
+            # 如果没有关键词，尝试从末尾提取金额
+            # 这种情况下使用原来的逻辑
+            amount_match = re.search(r'(?<![\d.])(\d+(?:\.\d{1,2})?)斤?$', normalized)
+            if not amount_match:
+                raise ParserError(f"无法识别金额分隔符(各/个/元等): {line}")
+
+            target_part = normalized[:amount_match.start()].strip()
+            amount_part = amount_match.group(1)
+
+        # 第三步：解析金额
+        # 提取金额数字（移除可能的"斤"字）
+        amount_part = amount_part.replace('斤', '').strip()
+        amount_match = re.match(r'^(\d+(?:\.\d{1,2})?).*', amount_part)
         if not amount_match:
             raise ParserError(f"无法识别金额: {line}")
 
@@ -79,19 +120,7 @@ class InstructionParser:
         except (InvalidOperation, ValueError):
             raise ParserError(f"无效的金额格式: {amount_str}")
 
-        # 移除金额部分，得到目标部分
-        target_part = normalized[:amount_match.start()].strip()
-
-        # 检测是否有"各数"关键词
-        is_each = False
-        for synonym in EACH_SYNONYMS:
-            if synonym in target_part:
-                is_each = True
-                # 移除该关键词
-                target_part = target_part.replace(synonym, ' ')
-                # 只处理第一个匹配的关键词
-                break
-
+        # 第四步：处理号码部分
         # 移除"号"字
         target_part = target_part.replace('号', ' ')
 

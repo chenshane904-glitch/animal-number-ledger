@@ -61,7 +61,7 @@ jobs:
           -srcfolder dist/dmg \
           -ov \
           -format UDZO \
-          "dist/十二动物号码归纳器-v1.2.0.dmg"
+          "dist/十二动物号码归纳器-v1.2.1.dmg"
 
         echo "✓ DMG文件创建成功"
 
@@ -84,7 +84,7 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: macos-dmg
-        path: dist/十二动物号码归纳器-v1.2.0.dmg
+        path: dist/十二动物号码归纳器-v1.2.1.dmg
         retention-days: 30
 
     - name: 构建摘要
@@ -93,7 +93,7 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📦 构建产物" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ 十二动物号码归纳器.app" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ 十二动物号码归纳器-v1.2.0.dmg" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ 十二动物号码归纳器-v1.2.1.dmg" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📥 下载方式" >> $GITHUB_STEP_SUMMARY
         echo "在Actions页面的Artifacts中下载" >> $GITHUB_STEP_SUMMARY
