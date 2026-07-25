@@ -124,35 +124,34 @@ class InstructionParser:
                 except ValueError:
                     pass
 
-            # 合并动物和号码
-            animals_unique = list(dict.fromkeys(animals_found))
+            # 合并动物和号码（不去重动物，保留所有重复）
+            # 动物：保留所有，包括重复
+            # 号码：去重（号码重复没有意义）
             numbers_unique = list(dict.fromkeys(numbers))
 
             all_targets = []
             target_type = None
 
-            if animals_unique and numbers_unique:
-                all_targets = animals_unique + numbers_unique
+            if animals_found and numbers_unique:
+                # 混合模式：动物保留重复 + 号码去重
+                all_targets = animals_found + numbers_unique
                 target_type = 'mixed'
-            elif animals_unique:
-                all_targets = animals_unique
+            elif animals_found:
+                # 仅动物：保留所有重复
+                all_targets = animals_found
                 target_type = 'animal'
             elif numbers_unique:
+                # 仅号码：去重
                 all_targets = numbers_unique
                 target_type = 'number'
             else:
                 continue
 
-            # 创建指令
-            instruction = Instruction(
-                source_line=line_num,
-                original_text=line,
-                normalized_text=normalized,
-                target_type=target_type,
-                targets=all_targets,
-                amount_integer=amount_integer,
-                warning=None
-            )
+            # 创建指令（不再检查动物重复）
+            warning = None
+            if len(numbers) != len(numbers_unique):
+                duplicates = [n for n in set(numbers) if numbers.count(n) > 1]
+                warning = f"重复号码: {', '.join(duplicates)}"
 
             instructions.append(instruction)
 
@@ -226,39 +225,33 @@ class InstructionParser:
                 except ValueError:
                     pass
 
-            # 合并动物和号码
-            animals_unique = list(dict.fromkeys(animals_found))
+            # 合并动物和号码（不去重动物，保留所有重复）
+            # 号码去重
             numbers_unique = list(dict.fromkeys(numbers))
 
             all_targets = []
             target_type = None
 
-            if animals_unique and numbers_unique:
-                # 混合模式
-                all_targets = animals_unique + numbers_unique
+            if animals_found and numbers_unique:
+                # 混合模式：动物保留重复 + 号码去重
+                all_targets = animals_found + numbers_unique
                 target_type = 'mixed'
-            elif animals_unique:
-                # 仅动物
-                all_targets = animals_unique
+            elif animals_found:
+                # 仅动物：保留所有重复
+                all_targets = animals_found
                 target_type = 'animal'
             elif numbers_unique:
-                # 仅号码
+                # 仅号码：去重
                 all_targets = numbers_unique
                 target_type = 'number'
             else:
                 continue
 
-            # 检查重复
+            # 检查号码重复（不检查动物重复）
             warning = None
-            if len(animals_found) != len(animals_unique):
-                duplicates = [a for a in set(animals_found) if animals_found.count(a) > 1]
-                warning = f"重复动物: {', '.join(duplicates)}"
-            if len(numbers_found) != len(numbers_unique):
-                duplicates = [n for n in set(numbers_found) if numbers_found.count(n) > 1]
-                if warning:
-                    warning += f"; 重复号码: {', '.join(duplicates)}"
-                else:
-                    warning = f"重复号码: {', '.join(duplicates)}"
+            if len(numbers) != len(numbers_unique):
+                duplicates = [n for n in set(numbers) if numbers.count(n) > 1]
+                warning = f"重复号码: {', '.join(duplicates)}"
 
             # 创建指令
             instruction = Instruction(
@@ -341,39 +334,33 @@ class InstructionParser:
             except ValueError:
                 pass
 
-        # 合并动物和号码
-        animals_unique = list(dict.fromkeys(animals_found))
+        # 合并动物和号码（不去重动物，保留所有重复）
+        # 号码去重
         numbers_unique = list(dict.fromkeys(numbers))
 
         all_targets = []
         target_type = None
 
-        if animals_unique and numbers_unique:
-            # 混合模式
-            all_targets = animals_unique + numbers_unique
+        if animals_found and numbers_unique:
+            # 混合模式：动物保留重复 + 号码去重
+            all_targets = animals_found + numbers_unique
             target_type = 'mixed'
-        elif animals_unique:
-            # 仅动物
-            all_targets = animals_unique
+        elif animals_found:
+            # 仅动物：保留所有重复
+            all_targets = animals_found
             target_type = 'animal'
         elif numbers_unique:
-            # 仅号码
+            # 仅号码：去重
             all_targets = numbers_unique
             target_type = 'number'
         else:
             raise ParserError(f"未找到有效目标: {line}")
 
-        # 检查重复
+        # 检查号码重复（不检查动物重复）
         warning = None
-        if len(animals_found) != len(animals_unique):
-            duplicates = [a for a in set(animals_found) if animals_found.count(a) > 1]
-            warning = f"重复动物: {', '.join(duplicates)}"
-        if len(numbers_found) != len(numbers_unique):
-            duplicates = [n for n in set(numbers_found) if numbers_found.count(n) > 1]
-            if warning:
-                warning += f"; 重复号码: {', '.join(duplicates)}"
-            else:
-                warning = f"重复号码: {', '.join(duplicates)}"
+        if len(numbers) != len(numbers_unique):
+            duplicates = [n for n in set(numbers) if numbers.count(n) > 1]
+            warning = f"重复号码: {', '.join(duplicates)}"
 
         # 创建指令
         instruction = Instruction(
