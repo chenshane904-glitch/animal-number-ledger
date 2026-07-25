@@ -25,6 +25,50 @@ class InstructionParser:
     def __init__(self, animals: dict):
         self.animals = animals
 
+    def _chinese_to_number(self, text: str) -> str:
+        """转换中文数字为阿拉伯数字"""
+        # 中文数字映射
+        chinese_map = {
+            '零': '0', '一': '1', '二': '2', '三': '3', '四': '4',
+            '五': '5', '六': '6', '七': '7', '八': '8', '九': '9',
+            '十': '10', '百': '100'
+        }
+
+        # 常见组合
+        combinations = {
+            '十': '10',
+            '二十': '20', '二十五': '25', '三十': '30',
+            '四十': '40', '五十': '50', '六十': '60',
+            '七十': '70', '八十': '80', '九十': '90',
+            '一百': '100', '二百': '200', '三百': '300',
+            '四百': '400', '五百': '500'
+        }
+
+        result = text
+        # 先替换组合（长的先替换）
+        for cn, num in sorted(combinations.items(), key=lambda x: -len(x[0])):
+            result = result.replace(cn, num)
+
+        # 再替换单个字符
+        for cn, num in chinese_map.items():
+            result = result.replace(cn, num)
+
+        return result
+
+    def _expand_range(self, text: str) -> str:
+        """展开数字范围 14-16 -> 14,15,16"""
+        # 查找所有范围模式：数字-数字
+        pattern = r'(\d+)-(\d+)'
+
+        def replace_range(match):
+            start = int(match.group(1))
+            end = int(match.group(2))
+            if start < end and end - start <= 50:  # 限制范围，避免异常大的范围
+                return ','.join(str(i) for i in range(start, end + 1))
+            return match.group(0)  # 保持原样
+
+        return re.sub(pattern, replace_range, text)
+
     def parse_input(self, input_text: str) -> List[Instruction]:
         """解析输入文本为指令列表 - 支持多条指令在同一行"""
         instructions = []
@@ -383,12 +427,37 @@ class InstructionParser:
         return instruction
 
     def _normalize_punctuation(self, text: str) -> str:
-        """标准化标点符号，将全角字符转换为半角"""
-        # 全角数字转半角
+        """标准化标点符号和输入格式"""
+        # 1. 中文数字转阿拉伯数字
+        text = self._chinese_to_number(text)
+
+        # 2. 全角数字转半角
         for i in range(10):
             text = text.replace(chr(0xFF10 + i), str(i))
 
-        # 全角小数点转半角
+        # 3. 全角小数点转半角
         text = text.replace('．', '.')
+
+        # 4. 统一范围符号为 -
+        range_symbols = ['—', '～', '~', '至', '到']
+        for symbol in range_symbols:
+            text = text.replace(symbol, '-')
+
+        # 5. 展开数字范围 (14-16 -> 14,15,16)
+        text = self._expand_range(text)
+
+        # 6. 统一号码分隔符为逗号
+        number_separators = ['、', '。', '；', '/', '\\', '_', '|']
+        for sep in number_separators:
+            text = text.replace(sep, ',')
+
+        # 7. 中文标点替换
+        text = text.replace('，', ',')
+        text = text.replace('：', ':')
+        text = text.replace('（', '(')
+        text = text.replace('）', ')')
+
+        # 8. 清理连续空格和不可见字符
+        text = ' '.join(text.split())
 
         return text
