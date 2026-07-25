@@ -289,8 +289,15 @@ class InstructionParser:
                 found_keyword = keyword
                 break
 
+        # 如果没有关键词，尝试提取末尾的纯数字作为金额
         if not amount_match:
-            raise ParserError(f"未找到金额: {line}")
+            # 匹配末尾的数字：非数字后面跟着数字直到结尾
+            end_number_match = re.search(r'(\d+(?:\.\d+)?)$', normalized)
+            if end_number_match:
+                amount_match = end_number_match
+                found_keyword = None  # 无关键词
+            else:
+                raise ParserError(f"未找到金额: {line}")
 
         amount_str = amount_match.group(1)
 

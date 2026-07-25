@@ -113,9 +113,10 @@ class Calculator:
                             # 无法转换为数字，忽略
                             pass
 
-        # 计算总数和非零数量
+        # 计算总数和记录数量
         total_amount = sum(number_amounts.values())
-        non_zero_count = sum(1 for amount in number_amounts.values() if amount > 0)
+        # 涉及号码数量 = 所有分配记录的数量（不是去重后的号码数量）
+        non_zero_count = len(allocations)
 
         result = CalculationResult(
             number_amounts=number_amounts,
