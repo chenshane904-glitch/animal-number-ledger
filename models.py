@@ -4,6 +4,11 @@ from typing import List, Dict, Optional
 from datetime import datetime
 
 
+class ParserError(Exception):
+    """解析错误"""
+    pass
+
+
 @dataclass
 class Instruction:
     """指令模型"""
