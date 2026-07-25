@@ -46,63 +46,232 @@ class InstructionParser:
         return instructions
 
     def _split_multi_instructions(self, line: str, line_num: int) -> List[Instruction]:
-        """分割一行中的多条指令"""
+        """分割一行中的多条指令 - 智能语义解析"""
         # 标准化
         normalized = self._normalize_punctuation(line)
 
-        # 查找所有关键词位置
-        keyword_positions = []
-        for keyword in EACH_SYNONYMS + ['数']:
-            pos = 0
-            while True:
-                pos = normalized.find(keyword, pos)
-                if pos == -1:
-                    break
-                keyword_positions.append((pos, keyword))
-                pos += len(keyword)
+        # 定义所有可能的关键词分隔符
+        keywords = EACH_SYNONYMS + ['数', '=', '：', ':']
 
-        if not keyword_positions:
-            # 没有关键词，尝试传统解析
+        # 方案1: 查找所有 "关键词+金额" 组合
+        pattern = r'(' + '|'.join(re.escape(k) for k in keywords) + r')\s*(\d+(?:\.\d+)?)'
+        matches = list(re.finditer(pattern, normalized))
+
+        if matches:
+            # 有关键词，使用关键词分割
+            return self._parse_with_keywords(line, line_num, normalized, matches)
+
+        # 方案2: 没有关键词，尝试识别 "目标+数字" 模式
+        # 查找所有独立的数字（可能是金额）
+        # 模式：非数字 + 数字 + 非数字（或结尾）
+        number_pattern = r'(?<!\d)(\d+(?:\.\d+)?)(?!\d)'
+        number_matches = list(re.finditer(number_pattern, normalized))
+
+        if len(number_matches) >= 2:
+            # 有多个数字，可能是多条指令
+            # 尝试将每个数字作为金额，前面的内容作为目标
+            return self._parse_without_keywords(line, line_num, normalized, number_matches)
+
+        # 方案3: 传统单条指令解析
+        return [self._parse_single_instruction(line, line_num)]
+
+    def _parse_without_keywords(self, line: str, line_num: int, normalized: str, number_matches: List) -> List[Instruction]:
+        """解析没有关键词的格式：鼠豹50马名30"""
+        instructions = []
+
+        for i, match in enumerate(number_matches):
+            amount_str = match.group(1)
+            amount_end = match.end()
+
+            # 确定目标部分的起始位置
+            if i == 0:
+                target_start = 0
+            else:
+                # 从上一个金额结束位置开始
+                target_start = number_matches[i - 1].end()
+
+            # 目标部分：从起始到当前数字之前
+            target_part = normalized[target_start:match.start()].strip()
+
+            if not target_part:
+                continue
+
+            # 解析金额
+            try:
+                amount = Decimal(amount_str)
+                if amount < 0:
+                    continue
+                amount_integer = int(amount * AMOUNT_MULTIPLIER)
+                if amount_integer > MAX_AMOUNT_INTEGER:
+                    continue
+            except (InvalidOperation, ValueError):
+                continue
+
+            # 从目标部分提取动物和号码
+            animals_found = []
+            for char in target_part:
+                if char in self.animals:
+                    animals_found.append(char)
+
+            # 提取号码
+            numbers_found = re.findall(r'\d+', target_part)
+            numbers = []
+            for num_str in numbers_found:
+                try:
+                    num = int(num_str)
+                    if MIN_NUMBER <= num <= MAX_NUMBER:
+                        numbers.append(str(num))
+                except ValueError:
+                    pass
+
+            # 合并动物和号码
+            animals_unique = list(dict.fromkeys(animals_found))
+            numbers_unique = list(dict.fromkeys(numbers))
+
+            all_targets = []
+            target_type = None
+
+            if animals_unique and numbers_unique:
+                all_targets = animals_unique + numbers_unique
+                target_type = 'mixed'
+            elif animals_unique:
+                all_targets = animals_unique
+                target_type = 'animal'
+            elif numbers_unique:
+                all_targets = numbers_unique
+                target_type = 'number'
+            else:
+                continue
+
+            # 创建指令
+            instruction = Instruction(
+                source_line=line_num,
+                original_text=line,
+                normalized_text=normalized,
+                target_type=target_type,
+                targets=all_targets,
+                amount_integer=amount_integer,
+                warning=None
+            )
+
+            instructions.append(instruction)
+
+        return instructions if instructions else [self._parse_single_instruction(line, line_num)]
+
+    def _parse_with_keywords(self, line: str, line_num: int, normalized: str, matches: List) -> List[Instruction]:
+        """分割一行中的多条指令 - 智能语义解析"""
+        # 标准化
+        normalized = self._normalize_punctuation(line)
+
+        # 定义所有可能的关键词分隔符
+        keywords = EACH_SYNONYMS + ['数', '=', '：', ':']
+
+        # 查找所有关键词+金额的位置
+        # 模式：关键词 + 可选空格 + 数字（金额）
+        instructions = []
+
+        # 使用正则查找所有 "关键词+金额" 组合
+        pattern = r'(' + '|'.join(re.escape(k) for k in keywords) + r')\s*(\d+(?:\.\d+)?)'
+        matches = list(re.finditer(pattern, normalized))
+
+        if not matches:
+            # 没有找到标准格式，尝试传统解析
             return [self._parse_single_instruction(line, line_num)]
 
-        # 按位置排序
-        keyword_positions.sort(key=lambda x: x[0])
+        # 处理每个匹配
+        for i, match in enumerate(matches):
+            keyword = match.group(1)
+            amount_str = match.group(2)
+            keyword_start = match.start()
+            amount_end = match.end()
 
-        # 根据关键词分割成多个片段
-        instructions = []
-        for i, (pos, keyword) in enumerate(keyword_positions):
-            # 确定片段起始位置
+            # 确定目标部分的起始位置
             if i == 0:
-                start = 0
+                target_start = 0
             else:
-                # 从上一个关键词后的数字结束位置开始
-                prev_pos, prev_keyword = keyword_positions[i - 1]
-                # 查找上一个关键词后的数字
-                after_prev = normalized[prev_pos + len(prev_keyword):]
-                num_match = re.match(r'\s*(\d+(?:\.\d+)?)', after_prev)
-                if num_match:
-                    start = prev_pos + len(prev_keyword) + len(num_match.group(0))
-                else:
-                    start = prev_pos + len(prev_keyword)
+                # 从上一个金额结束位置开始
+                target_start = matches[i - 1].end()
 
-            # 确定片段结束位置（当前关键词+数字）
-            after_keyword = normalized[pos + len(keyword):]
-            num_match = re.match(r'\s*(\d+(?:\.\d+)?)', after_keyword)
-            if num_match:
-                end = pos + len(keyword) + len(num_match.group(0))
-            else:
-                end = pos + len(keyword)
+            # 提取目标部分
+            target_part = normalized[target_start:keyword_start].strip()
 
-            # 提取片段
-            segment = normalized[start:end].strip()
+            if not target_part:
+                continue
 
-            if segment:
+            # 解析金额
+            try:
+                amount = Decimal(amount_str)
+                if amount < 0:
+                    continue
+                amount_integer = int(amount * AMOUNT_MULTIPLIER)
+                if amount_integer > MAX_AMOUNT_INTEGER:
+                    continue
+            except (InvalidOperation, ValueError):
+                continue
+
+            # 从目标部分提取动物和号码
+            animals_found = []
+            for char in target_part:
+                if char in self.animals:
+                    animals_found.append(char)
+
+            # 提取号码（从目标部分提取所有数字）
+            numbers_found = re.findall(r'\d+', target_part)
+            numbers = []
+            for num_str in numbers_found:
                 try:
-                    instruction = self._parse_single_instruction(segment, line_num)
-                    instructions.append(instruction)
-                except ParserError:
-                    # 忽略无法解析的片段
+                    num = int(num_str)
+                    if MIN_NUMBER <= num <= MAX_NUMBER:
+                        numbers.append(str(num))
+                except ValueError:
                     pass
+
+            # 合并动物和号码
+            animals_unique = list(dict.fromkeys(animals_found))
+            numbers_unique = list(dict.fromkeys(numbers))
+
+            all_targets = []
+            target_type = None
+
+            if animals_unique and numbers_unique:
+                # 混合模式
+                all_targets = animals_unique + numbers_unique
+                target_type = 'mixed'
+            elif animals_unique:
+                # 仅动物
+                all_targets = animals_unique
+                target_type = 'animal'
+            elif numbers_unique:
+                # 仅号码
+                all_targets = numbers_unique
+                target_type = 'number'
+            else:
+                continue
+
+            # 检查重复
+            warning = None
+            if len(animals_found) != len(animals_unique):
+                duplicates = [a for a in set(animals_found) if animals_found.count(a) > 1]
+                warning = f"重复动物: {', '.join(duplicates)}"
+            if len(numbers_found) != len(numbers_unique):
+                duplicates = [n for n in set(numbers_found) if numbers_found.count(n) > 1]
+                if warning:
+                    warning += f"; 重复号码: {', '.join(duplicates)}"
+                else:
+                    warning = f"重复号码: {', '.join(duplicates)}"
+
+            # 创建指令
+            instruction = Instruction(
+                source_line=line_num,
+                original_text=line,
+                normalized_text=normalized,
+                target_type=target_type,
+                targets=all_targets,
+                amount_integer=amount_integer,
+                warning=warning
+            )
+
+            instructions.append(instruction)
 
         return instructions if instructions else [self._parse_single_instruction(line, line_num)]
 
