@@ -417,7 +417,7 @@ class InstructionParser:
         return instruction
 
     def _normalize_punctuation(self, text: str) -> str:
-        """标准化标点符号和输入格式"""
+        """标准化标点符号和输入格式 - 所有标点符号只作为分隔符"""
         # 1. 中文数字转阿拉伯数字
         text = self._chinese_to_number(text)
 
@@ -428,26 +428,17 @@ class InstructionParser:
         # 3. 全角小数点转半角
         text = text.replace('．', '.')
 
-        # 4. 统一范围符号为 -
-        range_symbols = ['—', '～', '~', '至', '到']
-        for symbol in range_symbols:
-            text = text.replace(symbol, '-')
+        # 4. 所有标点符号统一替换为空格（作为分隔符）
+        # 包括：~ . , / - — ～ 、 。 ； | \ _ 等
+        separators = [
+            '~', '～', '—', '-', ',', '，', '.', '。',
+            '、', '；', ';', '/', '\\', '|', '_',
+            '：', ':', '（', '(', '）', ')'
+        ]
+        for sep in separators:
+            text = text.replace(sep, ' ')
 
-        # 5. 展开数字范围 (14-16 -> 14,15,16)
-        text = self._expand_range(text)
-
-        # 6. 统一号码分隔符为逗号
-        number_separators = ['、', '。', '；', '/', '\\', '_', '|']
-        for sep in number_separators:
-            text = text.replace(sep, ',')
-
-        # 7. 中文标点替换
-        text = text.replace('，', ',')
-        text = text.replace('：', ':')
-        text = text.replace('（', '(')
-        text = text.replace('）', ')')
-
-        # 8. 清理连续空格和不可见字符
+        # 5. 清理连续空格和不可见字符
         text = ' '.join(text.split())
 
         return text
