@@ -71,14 +71,6 @@ jobs:
         echo "构建完成！"
         echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
         ls -lh dist/*.dmg
-        ls -lh dist/*.app
-
-    - name: 上传.app文件
-      uses: actions/upload-artifact@v4
-      with:
-        name: macos-app
-        path: dist/十二动物号码归纳器.app
-        retention-days: 30
 
     - name: 上传DMG安装包
       uses: actions/upload-artifact@v4
@@ -92,15 +84,16 @@ jobs:
         echo "## 🎉 macOS构建成功！" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📦 构建产物" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ 十二动物号码归纳器.app" >> $GITHUB_STEP_SUMMARY
         echo "- ✅ 十二动物号码归纳器-v1.2.2.dmg" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### 📥 下载方式" >> $GITHUB_STEP_SUMMARY
-        echo "在Actions页面的Artifacts中下载" >> $GITHUB_STEP_SUMMARY
+        echo "在Actions页面的Artifacts中下载 macos-dmg.zip" >> $GITHUB_STEP_SUMMARY
+        echo "解压后得到 .dmg 文件" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### ⚠️ 使用提示" >> $GITHUB_STEP_SUMMARY
         echo "首次打开时右键点击 → 选择'打开' → 点击'打开'确认" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### 💡 输入格式" >> $GITHUB_STEP_SUMMARY
-        echo "- ✅ 正确: 1,2,3各0.50" >> $GITHUB_STEP_SUMMARY
-        echo "- ❌ 错误: 1.2.3各0.50（不要用句号）" >> $GITHUB_STEP_SUMMARY
+        echo "### 💡 v1.2.2 新功能" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ 上下文感知解析器" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ 多条指令在同一行（鼠豹数50马名数30）" >> $GITHUB_STEP_SUMMARY
+        echo "- ✅ 混合模式（动物+号码同时识别）" >> $GITHUB_STEP_SUMMARY
