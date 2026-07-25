@@ -306,6 +306,114 @@ class InstructionParser:
         return instructions if instructions else [self._parse_single_instruction(line, line_num)]
 
     def _parse_single_instruction(self, line: str, line_num: int) -> Instruction:
+        """解析单条指令 - 简化逻辑：提取目标和金额"""
+        original = line
+
+        # 标准化：全角转半角
+        normalized = self._normalize_punctuation(line)
+
+        # 查找关键词和金额
+        # 策略：关键词后的第一个连续数字就是金额，后面的文字全部忽略
+        amount_match = None
+        found_keyword = None
+
+        for keyword in EACH_SYNONYMS + ['数']:
+            # 查找：关键词后面跟着任意字符，然后是数字
+            pattern = rf'{re.escape(keyword)}\s*(\d+(?:\.\d+)?)'
+            match = re.search(pattern, normalized)
+            if match:
+                amount_match = match
+                found_keyword = keyword
+                # 找到关键词和金额后，移除金额后面的所有文字（米、元、块钱等）
+                # 只保留金额数字
+                break
+
+        # 如果没有关键词，尝试提取末尾的纯数字作为金额
+        if not amount_match:
+            # 匹配末尾的数字：非数字后面跟着数字直到结尾或遇到非数字字符
+            end_number_match = re.search(r'(\d+(?:\.\d+)?)(?:\D|$)', normalized)
+            if end_number_match:
+                amount_match = end_number_match
+                found_keyword = None  # 无关键词
+            else:
+                raise ParserError(f"未找到金额: {line}")
+
+        amount_str = amount_match.group(1)
+
+        # 解析金额
+        try:
+            amount = Decimal(amount_str)
+            if amount < 0:
+                raise ParserError(f"金额不能为负数: {amount_str}")
+            amount_integer = int(amount * AMOUNT_MULTIPLIER)
+            if amount_integer > MAX_AMOUNT_INTEGER:
+                raise ParserError(f"金额超出可存储范围: {amount_str}")
+        except (InvalidOperation, ValueError):
+            raise ParserError(f"无效的金额格式: {amount_str}")
+
+        # 关键词之前的部分是目标
+        target_part = normalized[:amount_match.start()].strip()
+
+        # 移除常见的无关字符
+        for char in ['号']:
+            target_part = target_part.replace(char, ' ')
+
+        target_part = ' '.join(target_part.split())
+
+        if not target_part:
+            raise ParserError(f"未找到目标: {line}")
+
+        # 提取动物（按顺序，不去重）
+        animals_found = []
+        for char in target_part:
+            if char in self.animals:
+                animals_found.append(char)
+
+        # 提取号码（从目标部分提取所有数字，按顺序，不去重）
+        numbers_found = re.findall(r'\d+', target_part)
+        numbers = []
+        for num_str in numbers_found:
+            try:
+                num = int(num_str)
+                if MIN_NUMBER <= num <= MAX_NUMBER:
+                    numbers.append(str(num))
+            except ValueError:
+                pass
+
+        # 合并动物和号码（不去重，按输入顺序）
+        all_targets = []
+        target_type = None
+
+        if animals_found and numbers:
+            # 混合模式：保留所有重复
+            all_targets = animals_found + numbers
+            target_type = 'mixed'
+        elif animals_found:
+            # 仅动物：保留所有重复
+            all_targets = animals_found
+            target_type = 'animal'
+        elif numbers:
+            # 仅号码：保留所有重复
+            all_targets = numbers
+            target_type = 'number'
+        else:
+            raise ParserError(f"未找到有效目标: {line}")
+
+        # 创建指令（不再检查重复）
+        warning = None
+
+        # 创建指令
+        instruction = Instruction(
+            source_line=line_num,
+            original_text=original,
+            normalized_text=normalized,
+            target_type=target_type,
+            targets=all_targets,
+            amount_integer=amount_integer,
+            warning=warning
+        )
+
+        return instruction
         """解析单条指令 - 格式：目标+关键词+金额"""
         original = line
 
@@ -429,10 +537,11 @@ class InstructionParser:
         text = text.replace('．', '.')
 
         # 4. 所有标点符号统一替换为空格（作为分隔符）
-        # 包括：~ . , / - — ～ 、 。 ； | \ _ 等
+        # 包括：~ . , / - _ + — ～ 、 。 ； | \ 等
+        # 禁止把任何符号当范围、运算
         separators = [
-            '~', '～', '—', '-', ',', '，', '.', '。',
-            '、', '；', ';', '/', '\\', '|', '_',
+            '~', '～', '—', '-', ',', '，', '、', '。',
+            '；', ';', '/', '\\', '|', '_', '+',
             '：', ':', '（', '(', '）', ')'
         ]
         for sep in separators:
