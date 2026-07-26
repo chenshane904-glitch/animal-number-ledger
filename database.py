@@ -130,6 +130,24 @@ class Database:
                 )
             """)
 
+            # settlements表 - 每日开奖结算记录
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS settlements (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ledger_id INTEGER NOT NULL,
+                    settlement_date TEXT NOT NULL,
+                    winning_number INTEGER NOT NULL,
+                    winning_amount INTEGER NOT NULL,
+                    odds INTEGER NOT NULL,
+                    payout_amount INTEGER NOT NULL,
+                    total_bet INTEGER NOT NULL,
+                    profit_loss INTEGER NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (ledger_id) REFERENCES ledgers(id) ON DELETE CASCADE,
+                    UNIQUE(ledger_id, settlement_date)
+                )
+            """)
+
             # 创建索引
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_ledgers_date
@@ -146,6 +164,14 @@ class Database:
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_allocations_instruction
                 ON allocations(instruction_id)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_settlements_ledger
+                ON settlements(ledger_id)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_settlements_date
+                ON settlements(settlement_date)
             """)
 
             # v1.0已归档账本没有结算字段，升级时按现有明细补算一次。
@@ -664,3 +690,109 @@ class Database:
         """关闭数据库连接"""
         if self.conn:
             self.conn.close()
+
+    # ==================== 结算相关方法 ====================
+
+    def save_settlement(self, ledger_id: int, settlement_date: str, winning_number: int,
+                       winning_amount: int, odds: int, payout_amount: int,
+                       total_bet: int, profit_loss: int) -> int:
+        """
+        保存结算记录
+
+        Args:
+            ledger_id: 账本ID
+            settlement_date: 结算日期
+            winning_number: 中奖号码
+            winning_amount: 中奖金额（分）
+            odds: 赔率
+            payout_amount: 应赔金额（分）
+            total_bet: 总下注（分）
+            profit_loss: 盈亏（分）
+
+        Returns:
+            结算记录ID
+        """
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT OR REPLACE INTO settlements (
+                    ledger_id, settlement_date, winning_number, winning_amount,
+                    odds, payout_amount, total_bet, profit_loss
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """, (ledger_id, settlement_date, winning_number, winning_amount,
+                  odds, payout_amount, total_bet, profit_loss))
+            self.conn.commit()
+            return cursor.lastrowid
+        except sqlite3.Error as e:
+            self.conn.rollback()
+            raise DatabaseError(f"保存结算记录失败: {e}")
+
+    def get_settlement_by_date(self, settlement_date: str):
+        """
+        获取指定日期的结算记录
+
+        Args:
+            settlement_date: 结算日期
+
+        Returns:
+            结算记录字典，如果不存在返回None
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT id, ledger_id, settlement_date, winning_number, winning_amount,
+                   odds, payout_amount, total_bet, profit_loss, created_at
+            FROM settlements
+            WHERE settlement_date = ?
+            ORDER BY created_at DESC
+            LIMIT 1
+        """, (settlement_date,))
+        row = cursor.fetchone()
+        if not row:
+            return None
+        return {
+            'id': row['id'],
+            'ledger_id': row['ledger_id'],
+            'settlement_date': row['settlement_date'],
+            'winning_number': row['winning_number'],
+            'winning_amount': row['winning_amount'],
+            'odds': row['odds'],
+            'payout_amount': row['payout_amount'],
+            'total_bet': row['total_bet'],
+            'profit_loss': row['profit_loss'],
+            'created_at': row['created_at']
+        }
+
+    def get_settlement_history(self, limit: int = 30):
+        """
+        获取结算历史记录
+
+        Args:
+            limit: 返回记录数量限制
+
+        Returns:
+            结算记录列表
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT id, ledger_id, settlement_date, winning_number, winning_amount,
+                   odds, payout_amount, total_bet, profit_loss, created_at
+            FROM settlements
+            ORDER BY settlement_date DESC, created_at DESC
+            LIMIT ?
+        """, (limit,))
+
+        results = []
+        for row in cursor.fetchall():
+            results.append({
+                'id': row['id'],
+                'ledger_id': row['ledger_id'],
+                'settlement_date': row['settlement_date'],
+                'winning_number': row['winning_number'],
+                'winning_amount': row['winning_amount'],
+                'odds': row['odds'],
+                'payout_amount': row['payout_amount'],
+                'total_bet': row['total_bet'],
+                'profit_loss': row['profit_loss'],
+                'created_at': row['created_at']
+            })
+        return results

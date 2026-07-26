@@ -118,9 +118,19 @@ class Settlement:
         Returns:
             结算记录ID
         """
-        # TODO: 需要在database.py中添加保存结算记录的方法
-        # 暂时返回0
-        return 0
+        if 'error' in settlement_result:
+            raise ValueError(f"无法保存错误的结算结果: {settlement_result['error']}")
+
+        return self.db.save_settlement(
+            ledger_id=settlement_result['ledger_id'],
+            settlement_date=settlement_result['ledger_date'],
+            winning_number=settlement_result['winning_number'],
+            winning_amount=settlement_result['winning_amount'],
+            odds=settlement_result['odds'],
+            payout_amount=settlement_result['payout_amount'],
+            total_bet=settlement_result['total_bet'],
+            profit_loss=settlement_result['profit_loss']
+        )
 
     def get_settlement_history(self, limit: int = 30) -> List[Dict]:
         """
@@ -132,6 +142,4 @@ class Settlement:
         Returns:
             结算历史列表
         """
-        # TODO: 需要在database.py中添加查询结算历史的方法
-        # 暂时返回空列表
-        return []
+        return self.db.get_settlement_history(limit)
