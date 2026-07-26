@@ -159,6 +159,15 @@ class MainWindow(ctk.CTk):
         )
         self.history_btn.pack(side='left', padx=5)
 
+        self.settlement_btn = ctk.CTkButton(
+            self.func_frame,
+            text="开奖结算",
+            command=self._open_settlement,
+            fg_color="#D4AF37",  # 金色
+            hover_color="#B8941D"
+        )
+        self.settlement_btn.pack(side='left', padx=5)
+
         self.mapping_btn = ctk.CTkButton(
             self.func_frame,
             text="动物号码表",
@@ -556,6 +565,14 @@ class MainWindow(ctk.CTk):
     def _open_mapping(self):
         """打开动物号码表设置"""
         MappingWindow(self, self.db, self._update_display)
+
+    def _open_settlement(self):
+        """打开开奖结算窗口"""
+        from settlement import Settlement
+        from ui.settlement_window import SettlementWindow
+
+        settlement = Settlement(self.db)
+        SettlementWindow(self, self.db, settlement)
 
     def _export_backup(self):
         """导出备份"""
