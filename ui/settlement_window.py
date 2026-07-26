@@ -158,12 +158,28 @@ class SettlementWindow(ctk.CTkToplevel):
         output.append("💰 结算数据")
         output.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         output.append("")
-        output.append(f"中奖号码金额: ￥{result['winning_amount_display']}")
+        output.append(f"中奖号码下注金额: ￥{result['winning_amount_display']}")
         output.append(f"赔率: {result['odds']}倍")
-        output.append(f"应赔金额: ￥{result['payout_amount_display']}")
+        output.append(f"中奖赔付金额: ￥{result['payout_amount_display']}")
         output.append("")
         output.append(f"今日总下注: ￥{result['total_bet_display']}")
-        output.append(f"今日盈亏: ￥{result['profit_loss_display']}")
+
+        # 盈亏显示带正负号和颜色标记
+        profit_loss = result['profit_loss']
+        if profit_loss > 0:
+            profit_loss_text = f"+￥{result['profit_loss_display']}"
+            status_text = "✅ 今日盈利"
+            status_color = "green"
+        elif profit_loss < 0:
+            profit_loss_text = f"-￥{abs(profit_loss / 100):.2f}"
+            status_text = "❌ 今日亏损"
+            status_color = "red"
+        else:
+            profit_loss_text = f"￥{result['profit_loss_display']}"
+            status_text = "➖ 今日持平"
+            status_color = "gray"
+
+        output.append(f"今日盈亏: {profit_loss_text}")
         output.append("")
         output.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
         output.append("📈 统计信息")
@@ -172,16 +188,7 @@ class SettlementWindow(ctk.CTkToplevel):
         output.append(f"总记录数: {result['total_records']}")
         output.append(f"涉及号码: {result['number_with_bet']}")
         output.append("")
-
-        # 盈亏颜色标记
-        profit_loss = result['profit_loss']
-        if profit_loss > 0:
-            output.append("✅ 今日盈利")
-        elif profit_loss < 0:
-            output.append("❌ 今日亏损")
-        else:
-            output.append("➖ 今日持平")
-
+        output.append(status_text)
         output.append("")
         output.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
