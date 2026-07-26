@@ -36,7 +36,14 @@ class Settlement:
             结算结果字典
         """
         # 1. 获取当天的活跃账本
-        ledger = self.db.get_active_ledger(ledger_date)
+        try:
+            ledger = self.db.get_or_create_active_ledger(ledger_date)
+        except Exception as e:
+            return {
+                'error': f'无法获取日期 {ledger_date} 的账本: {str(e)}',
+                'winning_number': winning_number,
+                'ledger_date': ledger_date
+            }
 
         if not ledger:
             return {
@@ -45,41 +52,47 @@ class Settlement:
                 'ledger_date': ledger_date
             }
 
-        # 2. 获取当天所有已确认的分配记录
-        all_allocations = []
-        for batch in ledger.batches:
-            all_allocations.extend(batch.allocations)
+        # 2. 使用get_ledger_totals获取每个号码的累计金额
+        number_amounts = self.db.get_ledger_totals(ledger.id)
 
-        if not all_allocations:
+        if not number_amounts or all(amount == 0 for amount in number_amounts.values()):
             return {
                 'error': f'当天没有任何下注记录',
                 'winning_number': winning_number,
-                'ledger_date': ledger_date
+                'ledger_date': ledger_date,
+                'winning_amount': 0,
+                'winning_amount_display': '0.00',
+                'odds': self.ODDS,
+                'payout_amount': 0,
+                'payout_amount_display': '0.00',
+                'total_bet': 0,
+                'total_bet_display': '0.00',
+                'profit_loss': 0,
+                'profit_loss_display': '0.00',
+                'total_records': 0,
+                'number_with_bet': 0
             }
 
-        # 3. 统计每个号码的累计下注金额
-        number_amounts = {}
-        for alloc in all_allocations:
-            if alloc.number not in number_amounts:
-                number_amounts[alloc.number] = 0
-            number_amounts[alloc.number] += alloc.amount_integer
-
-        # 4. 计算中奖号码的累计金额
+        # 3. 计算中奖号码的累计金额
         winning_amount = number_amounts.get(winning_number, 0)
 
-        # 5. 计算应赔金额 = 中奖号码金额 × 赔率
+        # 4. 计算应赔金额 = 中奖号码金额 × 赔率
         payout_amount = winning_amount * self.ODDS
 
-        # 6. 计算今日总下注
+        # 5. 计算今日总下注
         total_bet = sum(number_amounts.values())
 
-        # 7. 计算今日盈亏 = 总下注 - 应赔金额
+        # 6. 计算今日盈亏 = 总下注 - 应赔金额
         profit_loss = total_bet - payout_amount
+
+        # 7. 统计涉及号码数量
+        number_with_bet = sum(1 for amount in number_amounts.values() if amount > 0)
 
         # 8. 构建结算结果
         result = {
             'winning_number': winning_number,
             'ledger_date': ledger_date,
+            'ledger_id': ledger.id,
             'winning_amount': winning_amount,
             'winning_amount_display': f'{winning_amount / AMOUNT_MULTIPLIER:.2f}',
             'odds': self.ODDS,
@@ -89,8 +102,8 @@ class Settlement:
             'total_bet_display': f'{total_bet / AMOUNT_MULTIPLIER:.2f}',
             'profit_loss': profit_loss,
             'profit_loss_display': f'{profit_loss / AMOUNT_MULTIPLIER:.2f}',
-            'total_records': len(all_allocations),
-            'number_with_bet': len([a for a in number_amounts.values() if a > 0])
+            'total_records': number_with_bet,  # 简化：使用涉及号码数
+            'number_with_bet': number_with_bet
         }
 
         return result
