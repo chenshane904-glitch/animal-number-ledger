@@ -1,58 +1,44 @@
 @echo off
 REM Windows 打包脚本
+echo ================================================================
+echo               Windows 安装包打包脚本
+echo ================================================================
+echo.
 
-echo 开始打包 Windows 版本...
-
-REM 检查 Python
-python --version >nul 2>&1
+REM 检查 PyInstaller
+python -c "import PyInstaller" >nul 2>&1
 if errorlevel 1 (
-    echo 错误: 未找到 Python，请先安装 Python 3.11 或更高版本
-    pause
-    exit /b 1
-)
-
-REM 安装依赖
-echo 安装依赖...
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-python -m pip install -r requirements-dev.txt
-
-REM 运行测试
-echo 运行测试...
-python -m pytest tests/ -v -p no:cacheprovider
-if errorlevel 1 (
-    echo 错误: 测试失败，已停止打包
-    exit /b 1
-)
-
-REM 打包
-echo 打包应用...
-python -m PyInstaller --name="十二动物号码归纳器-v1.1.0" ^
-    --windowed ^
-    --onefile ^
-    --icon=NONE ^
-    --add-data "VERSION;." ^
-    --hidden-import=customtkinter ^
-    --hidden-import=tkinter ^
-    --hidden-import=sqlite3 ^
-    --collect-all customtkinter ^
-    app.py
-
-if errorlevel 1 (
-    echo 打包失败
-    pause
-    exit /b 1
+    echo [安装] 正在安装 PyInstaller...
+    pip install pyinstaller
 )
 
 echo.
-echo ========================================
-echo 打包完成！
-echo 可执行文件位于: dist\十二动物号码归纳器-v1.1.0.exe
-echo ========================================
+echo ================================================================
+echo 请选择要打包的版本:
+echo ================================================================
+echo 1. 澳门版
+echo 2. V2版
+echo 3. 香港版 (推荐)
+echo 4. 全部打包
+echo ================================================================
+set /p choice="请输入选项 (1-4): "
+
+echo.
+echo [打包中...]
 echo.
 
-REM 计算 SHA-256
-echo 计算文件校验值...
-powershell -NoProfile -Command "$hash=(Get-FileHash -LiteralPath 'dist\十二动物号码归纳器-v1.1.0.exe' -Algorithm SHA256).Hash.ToLower(); @('十二动物号码归纳器-v1.1.0.exe  SHA-256', $hash) | Set-Content -LiteralPath 'dist\SHA256.txt' -Encoding UTF8; Get-Content -LiteralPath 'dist\SHA256.txt'"
+if "%choice%"=="3" (
+    pyinstaller --name="香港" --windowed --onefile --noconsole --add-data="ui;ui" --add-data="tests;tests" app_hk.py
+) else if "%choice%"=="4" (
+    pyinstaller --name="动物号码归纳器-澳门版" --windowed --onefile --noconsole --add-data="ui;ui" --add-data="tests;tests" app.py
+    pyinstaller --name="动物号码归纳器-V2版" --windowed --onefile --noconsole --add-data="ui;ui" --add-data="tests;tests" app_v2.py
+    pyinstaller --name="香港" --windowed --onefile --noconsole --add-data="ui;ui" --add-data="tests;tests" app_hk.py
+) else (
+    echo 选项 %choice% 暂未实现
+)
 
+echo.
+echo ================================================================
+echo 打包完成！文件位置: dist\
+echo ================================================================
 pause

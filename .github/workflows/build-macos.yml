@@ -1,0 +1,100 @@
+name: Build macOS App
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install customtkinter
+        pip install pyinstaller
+
+    - name: Build 香港.app
+      run: |
+        pyinstaller --name="香港" \
+          --windowed \
+          --onefile \
+          --noconsole \
+          --add-data="ui:ui" \
+          --add-data="tests:tests" \
+          app_hk.py
+
+    - name: Verify .app file
+      run: |
+        ls -lh dist/
+        if [ -d "dist/香港.app" ]; then
+          echo "✅ 香港.app 生成成功"
+        else
+          echo "❌ 香港.app 生成失败"
+          exit 1
+        fi
+
+    - name: Install create-dmg
+      run: |
+        brew install create-dmg
+
+    - name: Create DMG
+      run: |
+        create-dmg \
+          --volname "香港" \
+          --window-pos 200 120 \
+          --window-size 600 400 \
+          --icon-size 100 \
+          --icon "香港.app" 175 120 \
+          --hide-extension "香港.app" \
+          --app-drop-link 425 120 \
+          "香港.dmg" \
+          "dist/香港.app" || true
+
+        # 如果 create-dmg 失败，使用备用方案
+        if [ ! -f "香港.dmg" ]; then
+          echo "使用备用方案创建 DMG..."
+          hdiutil create -volname "香港" -srcfolder "dist/香港.app" -ov -format UDZO "香港.dmg"
+        fi
+
+    - name: Verify DMG file
+      run: |
+        if [ -f "香港.dmg" ]; then
+          echo "✅ 香港.dmg 生成成功"
+          ls -lh 香港.dmg
+        else
+          echo "❌ 香港.dmg 生成失败"
+          exit 1
+        fi
+
+    - name: Upload 香港.app
+      uses: actions/upload-artifact@v3
+      with:
+        name: 香港-macOS-app
+        path: dist/香港.app
+
+    - name: Upload 香港.dmg
+      uses: actions/upload-artifact@v3
+      with:
+        name: 香港-macOS-dmg
+        path: 香港.dmg
+
+    - name: Create Release (if tagged)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          香港.dmg
+        name: 香港 ${{ github.ref_name }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
