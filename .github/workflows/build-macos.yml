@@ -26,25 +26,7 @@ jobs:
 
     - name: Build 香港.app
       run: |
-        pyinstaller --name="香港" \
-          --windowed \
-          --onefile \
-          --noconsole \
-          --add-data="ui:ui" \
-          --add-data="tests:tests" \
-          --add-data="constants.py:." \
-          --add-data="database.py:." \
-          --add-data="parser.py:." \
-          --add-data="calculator.py:." \
-          --add-data="models.py:." \
-          --add-data="settlement.py:." \
-          --add-data="daily_rollover.py:." \
-          --add-data="backup.py:." \
-          --hidden-import=customtkinter \
-          --hidden-import=PIL \
-          --hidden-import=PIL._tkinter_finder \
-          --collect-all customtkinter \
-          app_hk.py
+        pyinstaller hongkong.spec
 
     - name: Verify .app file
       run: |
