@@ -42,11 +42,28 @@ jobs:
 
     - name: Verify .app file
       run: |
+        echo "=== 检查 dist 目录 ==="
         ls -lh dist/
+
+        echo ""
+        echo "=== 查找所有 .app 文件 ==="
+        find dist -name "*.app" -type d
+
+        echo ""
+        echo "=== 验证香港.app ==="
         if [ -d "dist/香港.app" ]; then
           echo "✅ 香港.app 生成成功"
+
+          echo ""
+          echo "=== 检查 Info.plist ==="
+          if [ -f "dist/香港.app/Contents/Info.plist" ]; then
+            /usr/libexec/PlistBuddy -c "Print CFBundleName" "dist/香港.app/Contents/Info.plist" || echo "无 CFBundleName"
+            /usr/libexec/PlistBuddy -c "Print CFBundleDisplayName" "dist/香港.app/Contents/Info.plist" || echo "无 CFBundleDisplayName"
+          fi
         else
-          echo "❌ 香港.app 生成失败"
+          echo "❌ 香港.app 不存在"
+          echo "实际生成的文件:"
+          ls -la dist/
           exit 1
         fi
 
