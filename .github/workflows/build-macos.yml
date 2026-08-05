@@ -26,19 +26,19 @@ jobs:
 
     - name: Build 香港.app
       run: |
-        pyinstaller --name="香港" \
-          --windowed \
-          --noconsole \
-          --hidden-import=customtkinter \
-          --hidden-import=PIL._tkinter_finder \
-          --collect-all customtkinter \
-          --osx-bundle-identifier=com.hongkong.app \
-          --onedir \
-          app_hk.py
+        # 使用 spec 文件构建
+        pyinstaller --clean hongkong.spec --collect-all customtkinter
 
-        # 修改 Info.plist
-        /usr/libexec/PlistBuddy -c "Set :CFBundleName 香港" "dist/香港.app/Contents/Info.plist"
-        /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName 香港" "dist/香港.app/Contents/Info.plist"
+        # 验证构建结果
+        ls -la dist/
+
+        # 检查 Info.plist
+        if [ -f "dist/香港.app/Contents/Info.plist" ]; then
+          echo "=== Info.plist 内容 ==="
+          /usr/libexec/PlistBuddy -c "Print CFBundleName" "dist/香港.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print CFBundleDisplayName" "dist/香港.app/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "dist/香港.app/Contents/Info.plist"
+        fi
 
     - name: Verify .app file
       run: |
