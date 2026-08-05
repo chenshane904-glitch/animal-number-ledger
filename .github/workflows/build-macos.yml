@@ -101,13 +101,13 @@ jobs:
         fi
 
     - name: Upload 香港.app
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: 香港-macOS-app
         path: dist/香港.app
 
     - name: Upload 香港.dmg
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: 香港-macOS-dmg
         path: 香港.dmg
