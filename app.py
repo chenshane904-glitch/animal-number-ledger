@@ -1,30 +1,10 @@
 """主应用程序"""
 import sys
-import os
-from pathlib import Path
 import customtkinter as ctk
 from database import Database
 from daily_rollover import DailyRollover
 from ui.main_window import MainWindow
-
-
-def get_app_data_dir() -> Path:
-    """获取应用数据目录"""
-    if sys.platform == 'win32':
-        # Windows: %APPDATA%/AnimalNumberLedger
-        base = Path(os.environ.get('APPDATA', Path.home()))
-        app_dir = base / 'AnimalNumberLedger'
-    elif sys.platform == 'darwin':
-        # macOS: ~/Library/Application Support/AnimalNumberLedger
-        app_dir = Path.home() / 'Library' / 'Application Support' / 'AnimalNumberLedger'
-    else:
-        # Linux: ~/.local/share/AnimalNumberLedger
-        base = Path(os.environ.get('XDG_DATA_HOME', Path.home() / '.local' / 'share'))
-        app_dir = base / 'AnimalNumberLedger'
-
-    # 创建目录
-    app_dir.mkdir(parents=True, exist_ok=True)
-    return app_dir
+from platform_paths import get_database_path, get_user_data_dir
 
 
 def main():
@@ -33,9 +13,8 @@ def main():
     ctk.set_appearance_mode("light")
     ctk.set_default_color_theme("blue")
 
-    # 获取数据库路径
-    app_data_dir = get_app_data_dir()
-    db_path = app_data_dir / 'ledger.db'
+    # 获取数据库路径（使用统一的跨平台路径模块）
+    db_path = get_database_path()
 
     # 初始化数据库
     try:
@@ -71,8 +50,8 @@ def main():
     # 初始化归档管理器
     rollover = DailyRollover(db)
 
-    # 创建主窗口
-    app = MainWindow(db, rollover, app_data_dir)
+    # 创建主窗口（传递用户数据目录）
+    app = MainWindow(db, rollover, get_user_data_dir())
     app.mainloop()
 
     # 关闭数据库
