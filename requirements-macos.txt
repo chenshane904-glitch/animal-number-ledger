@@ -1,0 +1,20 @@
+# macOS 依赖文件
+# 只包含跨平台依赖，排除 Windows 专用包
+
+# UI 框架
+customtkinter==5.2.1
+darkdetect==0.8.0
+
+# 图像处理
+pillow==12.3.0
+
+# 打包工具
+pyinstaller==6.21.0
+pyinstaller-hooks-contrib==2026.6
+
+# 标准库（SQLite 已内置在 Python 中，无需额外安装）
+
+# 注意：
+# - 不包含 pywin32（Windows 专用）
+# - 不包含 pywin32-ctypes（Windows 专用）
+# - SQLite3 是 Python 标准库的一部分
