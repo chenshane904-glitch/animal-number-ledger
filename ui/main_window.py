@@ -1050,6 +1050,11 @@ class MainWindow(ctk.CTk):
         print(f"[HISTORY] 类型检查通过")
 
         # 保存到数据库 - 失败时会抛出异常
+        # entry_total 转换为元
+        from constants import AMOUNT_MULTIPLIER
+        entry_total_yuan = result.total_amount / AMOUNT_MULTIPLIER
+        daily_total_yuan = result.total_amount / AMOUNT_MULTIPLIER
+
         history_id = self.db.save_input_history(
             ledger_id=self.current_ledger.id,
             batch_id=batch_id,
@@ -1057,8 +1062,8 @@ class MainWindow(ctk.CTk):
             raw_input=raw_input,
             parsed_summary=parsed_summary,
             expanded_items=expanded_items,
-            entry_total=result.total_amount,
-            daily_total_after=result.total_amount,
+            entry_total=entry_total_yuan,
+            daily_total_after=daily_total_yuan,
             week_start=week_start_str,
             play_mode=play_mode
         )
@@ -1221,7 +1226,7 @@ class MainWindow(ctk.CTk):
     def _open_history(self):
         """打开历史记录"""
         from ui.history_window import HistoryWindow
-        HistoryWindow(self, self.db, self.current_ledger)
+        HistoryWindow(self, self.db, self.current_ledger, self.current_mode)
 
     def _open_mapping(self):
         """打开动物号码表设置"""
