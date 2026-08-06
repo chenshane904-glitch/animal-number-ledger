@@ -13,7 +13,6 @@ from backup import BackupManager, BackupError
 from constants import MIN_NUMBER, MAX_NUMBER, AMOUNT_MULTIPLIER
 from ui.history_window import HistoryWindow
 from ui.mapping_window import MappingWindow
-from ui.result_canvas_table import ResultCanvasTable
 
 
 class MainWindow(ctk.CTk):
@@ -84,9 +83,9 @@ class MainWindow(ctk.CTk):
         )
         self.settlement_label.pack(side='right', padx=10)
 
-        # 主容器（左侧38% 右侧62%）
+        # 主容器（左侧28% 右侧72%）
         self.main_container = ctk.CTkFrame(self)
-        self.main_container.pack(fill='both', expand=True, padx=0, pady=0)
+        self.main_container.pack(fill='both', expand=True, padx=10, pady=(5, 0))
 
         # 底部状态栏
         status_bar = ctk.CTkFrame(self, height=28, fg_color="#F0F0F0")
@@ -126,17 +125,14 @@ class MainWindow(ctk.CTk):
         ).grid(row=0, column=2, sticky='e', padx=10)
 
 
-        # 配置grid布局权重：左侧窄 右侧宽（只配置两列，按权重分配）
-        self.main_container.grid_columnconfigure(0, weight=38, minsize=420)  # 左侧38%
-        self.main_container.grid_columnconfigure(1, weight=62, minsize=700)  # 右侧62%
+        # 配置grid布局权重：左侧窄 右侧宽
+        self.main_container.grid_columnconfigure(0, weight=28, minsize=300)  # 左侧28%
+        self.main_container.grid_columnconfigure(1, weight=72, minsize=800)  # 右侧72%，最小800px
         self.main_container.grid_rowconfigure(0, weight=1)
 
         # 左侧：操作区域
         self.left_frame = ctk.CTkFrame(self.main_container)
-        self.left_frame.grid(row=0, column=0, sticky='nsew', padx=(8, 4), pady=8)
-
-        # 配置左侧区域的列权重（让内容填满宽度）
-        self.left_frame.grid_columnconfigure(0, weight=1)
+        self.left_frame.grid(row=0, column=0, sticky='nsew', padx=(0, 5))
 
         # 配置左侧区域的行权重
         self.left_frame.grid_rowconfigure(0, weight=42)  # 输入数据 42%
@@ -275,18 +271,12 @@ class MainWindow(ctk.CTk):
 
         # 右侧：结果显示
         self.right_frame = ctk.CTkFrame(self.main_container)
-        self.right_frame.grid(row=0, column=1, sticky='nsew', padx=(4, 8), pady=8)
-
-        # 配置右侧区域的列权重（让内容填满宽度）
-        self.right_frame.grid_columnconfigure(0, weight=1)
-        # 配置右侧区域的行权重（让表格可扩展）
-        self.right_frame.grid_rowconfigure(0, weight=0)  # 统计区固定高度
-        self.right_frame.grid_rowconfigure(1, weight=1)  # 表格可扩展
+        self.right_frame.grid(row=0, column=1, sticky='nsew', padx=(5, 0))
 
         # 顶部统计区域：四个统计栏横向排列
         stats_container = ctk.CTkFrame(self.right_frame, height=70)
-        stats_container.grid(row=0, column=0, sticky='ew', padx=0, pady=(5, 5))
-        stats_container.grid_propagate(False)
+        stats_container.pack(fill='x', padx=10, pady=(10, 5))
+        stats_container.pack_propagate(False)
 
         # 配置4列均分
         for i in range(4):
@@ -340,53 +330,57 @@ class MainWindow(ctk.CTk):
         )
         self.max_amount_label.pack(pady=(0, 5))
 
-        # 表格区域 - 使用ResultCanvasTable组件
-        self.result_table = ResultCanvasTable(self.right_frame)
-        self.result_table.grid(row=1, column=0, sticky='nsew', padx=0, pady=(5, 5))
+        # 表格区域
+        table_frame = ctk.CTkFrame(self.right_frame)
+        table_frame.pack(fill='both', expand=True, padx=10, pady=(5, 10))
 
-        # 临时调试边框
-        self.left_frame.configure(border_width=2, border_color="blue")
-        self.right_frame.configure(border_width=2, border_color="red")
-        self.main_container.configure(border_width=2, border_color="green")
+        # 表头（固定在顶部，深蓝色背景）
+        header_frame = ctk.CTkFrame(table_frame, fg_color="#003366", height=35)
+        header_frame.pack(fill='x')
+        header_frame.pack_propagate(False)
 
-        # 延迟诊断布局
-        self.after(500, self._diagnose_layout)
+        # 配置表头列宽
+        header_frame.grid_columnconfigure(0, weight=15)  # 号码 15%
+        header_frame.grid_columnconfigure(1, weight=25)  # 金额 25%
+        header_frame.grid_columnconfigure(2, weight=28)  # 赔付 28%
+        header_frame.grid_columnconfigure(3, weight=32)  # 盈利 32%
 
-    def _diagnose_layout(self):
-        """诊断布局间隙"""
-        self.update_idletasks()
+        # 表头标签
+        ctk.CTkLabel(
+            header_frame,
+            text="号码",
+            font=("Arial", 14, "bold"),
+            text_color="white"
+        ).grid(row=0, column=0, sticky='ew', padx=5)
 
-        # 获取坐标
-        main_w = self.main_container.winfo_width()
-        left_x = self.left_frame.winfo_x()
-        left_w = self.left_frame.winfo_width()
-        right_x = self.right_frame.winfo_x()
-        right_w = self.right_frame.winfo_width()
+        ctk.CTkLabel(
+            header_frame,
+            text="金额",
+            font=("Arial", 14, "bold"),
+            text_color="white"
+        ).grid(row=0, column=1, sticky='e', padx=5)
 
-        left_end = left_x + left_w
-        gap = right_x - left_end
+        ctk.CTkLabel(
+            header_frame,
+            text="赔付（金额×47）",
+            font=("Arial", 14, "bold"),
+            text_color="white"
+        ).grid(row=0, column=2, sticky='e', padx=5)
 
-        print("\n=== 布局诊断 ===")
-        print(f"主容器宽度: {main_w}px")
-        print(f"左侧区域: x={left_x}, width={left_w}, end={left_end}")
-        print(f"右侧区域: x={right_x}, width={right_w}")
-        print(f"实际间隙: {gap}px")
+        ctk.CTkLabel(
+            header_frame,
+            text="盈利（总下注－赔付）",
+            font=("Arial", 14, "bold"),
+            text_color="white"
+        ).grid(row=0, column=3, sticky='e', padx=5)
 
-        # 列出所有子控件
-        print("\n主容器子控件:")
-        for widget in self.main_container.winfo_children():
-            info = widget.grid_info() if widget.winfo_manager() == "grid" else {}
-            print(f"  {widget.winfo_class()}: column={info.get('column', '?')}, {widget.winfo_geometry()}")
+        # 表格内容区域（可滚动）
+        self.results_scroll = ctk.CTkScrollableFrame(table_frame)
+        self.results_scroll.pack(fill='both', expand=True)
 
-        # 检查间隙
-        if gap > 16:
-            print(f"\n[WARNING] 左右间隙过大 ({gap}px > 16px)")
-        elif gap < 0:
-            print(f"\n[WARNING] 左右区域重叠 ({gap}px < 0)")
-        else:
-            print(f"\n[OK] 间隙正常 ({gap}px)")
-
-        print("=== 诊断完成 ===\n")
+        # 初始化存储
+        self.number_labels = {}
+        self.number_frames = {}
 
     def _load_current_ledger(self):
         """加载当前账本"""
@@ -416,39 +410,6 @@ class MainWindow(ctk.CTk):
                 return
         self.settlement_label.configure(text="上次结算总账金额: --")
 
-    def _calculate_risk_rows(self, totals_dict, total_bet_int):
-        """
-        统一计算所有号码的风险数据
-
-        参数:
-            totals_dict: {号码: 金额整数} 字典
-            total_bet_int: 总下注金额整数
-
-        返回:
-            已排序的行数据列表，每行包含 {number, amount, payout, profit}
-        """
-        total_bet = total_bet_int / AMOUNT_MULTIPLIER
-
-        # 创建所有号码的行数据
-        rows = []
-        for num in range(MIN_NUMBER, MAX_NUMBER + 1):
-            amount_int = totals_dict.get(num, 0)
-            amount = amount_int / AMOUNT_MULTIPLIER
-            payout = amount * 47
-            profit = total_bet - payout
-
-            rows.append({
-                'number': num,
-                'amount': amount,
-                'payout': payout,
-                'profit': profit
-            })
-
-        # 排序：金额从大到小，金额相同按号码从小到大
-        rows.sort(key=lambda x: (-x['amount'], x['number']))
-
-        return rows
-
     def _update_display(self):
         """更新显示"""
         # 更新日期和账本信息
@@ -459,7 +420,34 @@ class MainWindow(ctk.CTk):
         self.current_totals = self.db.get_ledger_totals(self.current_ledger.id)
         self.current_sources = self.db.get_ledger_sources(self.current_ledger.id)
 
-        # 计算总下注和非零号码
+        # 找出最大金额（只考虑大于0的总数）
+        max_amount_int = 0
+        for amount_int in self.current_totals.values():
+            if amount_int > max_amount_int:
+                max_amount_int = amount_int
+
+        # 更新号码显示（按金额排序）
+        total = 0
+        non_zero = 0
+
+        # 创建排序列表：(号码, 金额整数)
+        sorted_numbers = []
+        for i in range(MIN_NUMBER, MAX_NUMBER + 1):
+            amount_int = self.current_totals.get(i, 0)
+            sorted_numbers.append((i, amount_int))
+
+        # 排序：金额从大到小，金额相同按号码从小到大
+        sorted_numbers.sort(key=lambda x: (-x[1], x[0]))
+
+        # 清空当前显示
+        for widget in self.results_scroll.winfo_children():
+            widget.destroy()
+
+        # 重新创建号码标签（按排序顺序）
+        self.number_labels = {}
+        self.number_frames = {}
+
+        # 计算总下注（先遍历一遍）
         total = 0
         non_zero = 0
         for i in range(MIN_NUMBER, MAX_NUMBER + 1):
@@ -468,14 +456,97 @@ class MainWindow(ctk.CTk):
             if amount_int > 0:
                 non_zero += 1
 
-        # 找出最大金额的号码（金额相同时取号码小的）
+        # 找出最大金额的号码
         max_num = None
         max_amount_int = 0
-        for num in range(MIN_NUMBER, MAX_NUMBER + 1):
-            amount_int = self.current_totals.get(num, 0)
+        for num, amount_int in sorted_numbers:
             if amount_int > max_amount_int:
                 max_amount_int = amount_int
                 max_num = num
+
+        # 创建表格行
+        for idx, (num, amount_int) in enumerate(sorted_numbers):
+            amount = amount_int / AMOUNT_MULTIPLIER
+
+            # 确定排名色条颜色
+            rank = idx + 1
+            if rank <= 10:
+                rank_color = "#DD0000"  # 红色
+            elif rank <= 20:
+                rank_color = "#0066CC"  # 蓝色
+            elif rank <= 30:
+                rank_color = "#FF8800"  # 橙色
+            elif rank <= 40:
+                rank_color = "#00AA00"  # 绿色
+            else:
+                rank_color = "#888888"  # 灰色
+
+            # 行容器（pack到scrollable frame中）
+            row_frame = ctk.CTkFrame(self.results_scroll, height=32)
+            row_frame.pack(fill='x', pady=1)
+            row_frame.pack_propagate(False)
+
+            # 配置列宽
+            row_frame.grid_columnconfigure(0, weight=5, minsize=5)    # 色条
+            row_frame.grid_columnconfigure(1, weight=10, minsize=40)  # 号码
+            row_frame.grid_columnconfigure(2, weight=25)              # 金额
+            row_frame.grid_columnconfigure(3, weight=28)              # 赔付
+            row_frame.grid_columnconfigure(4, weight=32)              # 盈利
+
+            # 排名色条
+            color_bar = ctk.CTkFrame(row_frame, width=5, fg_color=rank_color)
+            color_bar.grid(row=0, column=0, sticky='ns', padx=0)
+
+            # 号码（居中）
+            num_label = ctk.CTkLabel(
+                row_frame,
+                text=f"{num:02d}",
+                font=("Arial", 13, "bold"),
+                anchor='center'
+            )
+            num_label.grid(row=0, column=1, sticky='nsew', padx=3, pady=5)
+
+            # 金额（右对齐）
+            amount_label = ctk.CTkLabel(
+                row_frame,
+                text=f"{amount:,.2f}",
+                font=("Arial", 13),
+                anchor='e'
+            )
+            amount_label.grid(row=0, column=2, sticky='nsew', padx=5, pady=5)
+
+            # 赔付（右对齐，占位）
+            payout_label = ctk.CTkLabel(
+                row_frame,
+                text="--",
+                font=("Arial", 13),
+                anchor='e'
+            )
+            payout_label.grid(row=0, column=3, sticky='nsew', padx=5, pady=5)
+
+            # 盈利（右对齐，占位）
+            profit_label = ctk.CTkLabel(
+                row_frame,
+                text="--",
+                font=("Arial", 13, "bold"),
+                anchor='e'
+            )
+            profit_label.grid(row=0, column=4, sticky='nsew', padx=5, pady=5)
+
+            # 点击显示来源
+            row_frame.bind('<Button-1>', lambda e, n=num: self._show_sources(n))
+            num_label.bind('<Button-1>', lambda e, n=num: self._show_sources(n))
+            amount_label.bind('<Button-1>', lambda e, n=num: self._show_sources(n))
+            payout_label.bind('<Button-1>', lambda e, n=num: self._show_sources(n))
+            profit_label.bind('<Button-1>', lambda e, n=num: self._show_sources(n))
+
+            # 保存引用
+            self.number_labels[num] = {
+                'amount': amount_label,
+                'payout': payout_label,
+                'profit': profit_label
+            }
+            self.number_frames[num] = row_frame
 
         # 更新统计
         self.total_label.configure(text=f"{total / AMOUNT_MULTIPLIER:,.2f}")
@@ -489,9 +560,50 @@ class MainWindow(ctk.CTk):
             self.max_num_label.configure(text="--")
             self.max_amount_label.configure(text="0.00")
 
-        # 计算所有行数据并更新表格
-        rows = self._calculate_risk_rows(self.current_totals, total)
-        self.result_table.set_rows(rows, total / AMOUNT_MULTIPLIER)
+        # 实时风险预览：更新所有号码的赔付和盈利
+        self._update_risk_preview(total)
+
+    def _update_risk_preview(self, total_bet_int):
+        """
+        实时风险预览：计算并更新每个号码的风险数据
+
+        参数:
+            total_bet_int: 当天总下注金额（整数，已乘以AMOUNT_MULTIPLIER）
+        """
+        total_bet = total_bet_int / AMOUNT_MULTIPLIER
+
+        for num in range(MIN_NUMBER, MAX_NUMBER + 1):
+            if num not in self.number_labels:
+                continue
+
+            labels = self.number_labels[num]
+            row_frame = self.number_frames[num]
+
+            # 获取本号下注金额
+            num_bet_int = self.current_totals.get(num, 0)
+            num_bet = num_bet_int / AMOUNT_MULTIPLIER
+
+            # 计算中奖赔付：本号下注 × 47
+            payout = num_bet * 47
+
+            # 计算预计利润：总下注 - 中奖赔付
+            profit = total_bet - payout
+
+            # 更新金额显示（已在创建时设置）
+            labels['amount'].configure(text=f"{num_bet:,.2f}")
+
+            # 更新赔付显示
+            labels['payout'].configure(text=f"{payout:,.2f}")
+
+            # 更新盈利显示，根据正负设置颜色
+            if profit >= 0:
+                profit_text = f"+{profit:,.2f}"
+                profit_color = "#00AA00"  # 绿色
+            else:
+                profit_text = f"{profit:,.2f}"  # 负数自带减号
+                profit_color = "#DD0000"  # 红色
+
+            labels['profit'].configure(text=profit_text, text_color=profit_color)
 
 
     def _on_input_change(self):
