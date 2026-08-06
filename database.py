@@ -962,6 +962,12 @@ class Database:
 
             results = []
             for row in cursor.fetchall():
+                # 处理 play_mode 字段（可能为 NULL）
+                try:
+                    play_mode = row['play_mode'] if row['play_mode'] else 'number'
+                except (KeyError, IndexError):
+                    play_mode = 'number'
+
                 results.append({
                     'id': row['id'],
                     'ledger_id': row['ledger_id'],
@@ -970,11 +976,11 @@ class Database:
                     'created_at': row['created_at'],
                     'raw_input': row['raw_input'],
                     'parsed_summary': row['parsed_summary'],
-                    'expanded_items': json.loads(row['expanded_items_json']),
+                    'expanded_items': json.loads(row['expanded_items_json']) if row['expanded_items_json'] else [],
                     'entry_total': row['entry_total'],
                     'daily_total_after': row['daily_total_after'],
                     'status': row['status'],
-                    'play_mode': row.get('play_mode', 'number')  # 向后兼容
+                    'play_mode': play_mode
                 })
             return results
         except sqlite3.Error as e:

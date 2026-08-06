@@ -183,6 +183,9 @@ class HistoryWindow(ctk.CTkToplevel):
         """创建单条记录项 - 连续流水式"""
         from constants import AMOUNT_MULTIPLIER
 
+        # 调试输出
+        print(f"[RENDER] 渲染记录 ID={record.get('id')}, play_mode={record.get('play_mode')}, raw_input={record.get('raw_input', '')[:30]}")
+
         # 内容容器 - 白色背景
         content_frame = ctk.CTkFrame(self.scroll_frame, fg_color="#FFFFFF", corner_radius=0)
         content_frame.pack(fill='x', padx=15, pady=8)
