@@ -46,50 +46,9 @@ class FlatZodiacService:
         Raises:
             ValueError: 解析失败
         """
-        if not text or not text.strip():
-            raise ValueError("输入为空")
-
-        lines = text.strip().split('\n')
-        entries = []
-
-        for line_num, line in enumerate(lines, 1):
-            line = line.strip()
-            if not line:
-                continue
-
-            # 移除"平特一肖"前缀
-            if line.startswith("平特一肖"):
-                line = line[4:].strip()
-
-            # 识别生肖和金额
-            zodiac = None
-            amount_str = None
-
-            for z in self.ZODIACS:
-                if line.startswith(z):
-                    zodiac = z
-                    amount_str = line[len(z):].strip()
-                    break
-
-            if not zodiac:
-                raise ValueError(f"第{line_num}行：无法识别生肖")
-
-            # 解析金额
-            try:
-                amount_str = amount_str.replace("各", "").strip()
-                amount = float(amount_str)
-                if amount <= 0:
-                    raise ValueError(f"第{line_num}行：金额必须大于0")
-                entries.append(FlatZodiacEntry(zodiac, amount))
-            except ValueError as e:
-                if "无法识别" in str(e) or "金额必须" in str(e):
-                    raise
-                raise ValueError(f"第{line_num}行：金额格式错误")
-
-        if not entries:
-            raise ValueError("没有有效的输入")
-
-        return entries
+        from flat_zodiac_parser import FlatZodiacParser
+        parser = FlatZodiacParser()
+        return parser.parse(text)
 
     def add_batch(self, ledger_id: int, raw_input: str, entries: List[FlatZodiacEntry]) -> int:
         """
@@ -109,8 +68,8 @@ class FlatZodiacService:
         cursor = self.conn.cursor()
 
         try:
-            # 计算本次总额
-            entry_total = sum(e.amount_int for e in entries)
+            # 计算本次总额（元）
+            entry_total = sum(e.amount for e in entries)
 
             # 插入批次
             cursor.execute("""
@@ -123,12 +82,12 @@ class FlatZodiacService:
 
             # 插入明细
             for entry in entries:
-                payout = int(entry.amount_int * self.DEFAULT_ODDS)
+                payout = entry.amount * self.DEFAULT_ODDS
                 cursor.execute("""
                     INSERT INTO flat_zodiac_items
                     (batch_id, zodiac, amount, odds, payout)
                     VALUES (?, ?, ?, ?, ?)
-                """, (batch_id, entry.zodiac, entry.amount_int, self.DEFAULT_ODDS, payout))
+                """, (batch_id, entry.zodiac, entry.amount, self.DEFAULT_ODDS, payout))
 
             # 提交事务
             self.conn.commit()
@@ -148,11 +107,11 @@ class FlatZodiacService:
 
         Returns:
             {
-                'total_bet': 总下注（整数，分）,
+                'total_bet': 总下注（浮点数，元）,
                 'non_zero_count': 非零生肖数量,
                 'max_zodiac': 最高下注生肖,
-                'max_amount': 最高金额（整数，分）,
-                'zodiac_amounts': {生肖: 金额整数}
+                'max_amount': 最高金额（浮点数，元）,
+                'zodiac_amounts': {生肖: 金额浮点数（元）}
             }
         """
         cursor = self.conn.cursor()

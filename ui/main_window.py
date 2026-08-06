@@ -687,6 +687,7 @@ class MainWindow(ctk.CTk):
 
     def _on_input_change(self):
         """输入变化时解析预览"""
+        from format_utils import format_amount
         input_text = self.input_text.get("1.0", "end-1c").strip()
 
         if not input_text:
@@ -722,7 +723,7 @@ class MainWindow(ctk.CTk):
                     targets_str = ', '.join(inst.targets) + ' (各号)'
 
                 amount = inst.amount_integer / AMOUNT_MULTIPLIER
-                line = f"第{inst.source_line}行: {targets_str} → {amount:.2f}"
+                line = f"第{inst.source_line}行: {targets_str} → {format_amount(amount)}"
 
                 if inst.warning:
                     line += f" ⚠️ {inst.warning}"
@@ -738,6 +739,7 @@ class MainWindow(ctk.CTk):
             # 根据当前模式获取计算器
             from calculator_factory import CalculatorFactory
             from play_mode import PlayMode
+            from format_utils import format_amount
             calculator = CalculatorFactory.get_calculator(self.current_mode, animal_mapping)
 
             # 计算本次结果
@@ -751,20 +753,20 @@ class MainWindow(ctk.CTk):
                 for i in range(MIN_NUMBER, MAX_NUMBER + 1):
                     if result.number_amounts[i] > 0:
                         amount = result.number_amounts[i] / AMOUNT_MULTIPLIER
-                        calc_lines.append(f"{i:02d}: {amount:.2f}")
+                        calc_lines.append(f"{i:02d}: {format_amount(amount)}")
 
                 total = result.total_amount / AMOUNT_MULTIPLIER
-                calc_lines.append(f"\n本次总数: {total:.2f}")
+                calc_lines.append(f"\n本次总数: {format_amount(total)}")
                 calc_lines.append(f"涉及号码: {result.non_zero_count}")
             else:
                 # 平特模式：显示生肖列表
                 for animal, amount_int in result.animal_amounts.items():
                     if amount_int > 0:
                         amount = amount_int / AMOUNT_MULTIPLIER
-                        calc_lines.append(f"{animal}: {amount:.2f}")
+                        calc_lines.append(f"{animal}: {format_amount(amount)}")
 
                 total = result.total_amount / AMOUNT_MULTIPLIER
-                calc_lines.append(f"\n本次总数: {total:.2f}")
+                calc_lines.append(f"\n本次总数: {format_amount(total)}")
                 calc_lines.append(f"涉及生肖: {result.non_zero_count}")
 
             self.calc_text.configure(state='normal')
@@ -848,6 +850,7 @@ class MainWindow(ctk.CTk):
     def _confirm_add_flat_zodiac(self, input_text: str):
         """平特一肖独立追加流程"""
         from flat_zodiac_service import FlatZodiacService
+        from format_utils import format_amount
 
         # 创建服务
         service = FlatZodiacService(self.db.conn)
@@ -857,11 +860,11 @@ class MainWindow(ctk.CTk):
         entries = service.parse_input(input_text)
         print(f"[7] 解析成功: {len(entries)} 条记录")
         for e in entries:
-            print(f"    {e.zodiac} = {e.amount:.2f}")
+            print(f"    {e.zodiac} = {format_amount(e.amount)}")
 
         # 计算本次总额
         entry_total = sum(e.amount for e in entries)
-        print(f"[8] 本次总额: {entry_total:.2f}")
+        print(f"[8] 本次总额: {format_amount(entry_total)}")
 
         # 写入数据库（事务）
         print(f"[9] 写入数据库...")
@@ -873,10 +876,10 @@ class MainWindow(ctk.CTk):
         print(f"[12] 重新查询汇总...")
         summary = service.get_summary(self.current_ledger.id)
         print(f"[13] 查询成功:")
-        print(f"     总下注: {summary['total_bet'] / AMOUNT_MULTIPLIER:.2f}")
+        print(f"     总下注: {format_amount(summary['total_bet'])}")
         for zodiac in ['虎', '龙', '鼠', '牛', '兔', '蛇', '马', '羊', '猴', '鸡', '狗', '猪']:
             if summary['zodiac_amounts'].get(zodiac, 0) > 0:
-                print(f"     {zodiac}累计: {summary['zodiac_amounts'][zodiac] / AMOUNT_MULTIPLIER:.2f}")
+                print(f"     {zodiac}累计: {format_amount(summary['zodiac_amounts'][zodiac])}")
 
         # 刷新右侧12生肖表
         print(f"[14] 刷新右侧12生肖表...")
@@ -956,39 +959,39 @@ class MainWindow(ctk.CTk):
 
     def _refresh_flat_zodiac_display(self, summary: dict):
         """刷新右侧12生肖表格显示"""
-        from constants import AMOUNT_MULTIPLIER
+        from format_utils import format_amount
 
         zodiac_amounts = summary['zodiac_amounts']
         total_bet = summary['total_bet']
 
-        # 更新表格
+        # 更新表格（金额已经是元）
         self.result_table.update_data(zodiac_amounts, total_bet)
 
         print(f"[DEBUG] 右侧表格已更新:")
         for zodiac, amount in zodiac_amounts.items():
             if amount > 0:
-                print(f"  {zodiac}: {amount / AMOUNT_MULTIPLIER:.2f}")
+                print(f"  {zodiac}: {format_amount(amount)}")
 
     def _refresh_flat_zodiac_stats(self, summary: dict):
         """刷新顶部统计显示"""
-        from constants import AMOUNT_MULTIPLIER
+        from format_utils import format_amount_with_separator
 
         total_bet = summary['total_bet']
         non_zero_count = summary['non_zero_count']
         max_zodiac = summary['max_zodiac']
         max_amount = summary['max_amount']
 
-        # 更新顶部统计标签
-        self.total_label.configure(text=f"{total_bet / AMOUNT_MULTIPLIER:,.2f}")
+        # 更新顶部统计标签（金额已经是元）
+        self.total_label.configure(text=format_amount_with_separator(total_bet))
         self.count_label.configure(text=f"{non_zero_count}")
         self.max_num_label.configure(text=max_zodiac)
-        self.max_amount_label.configure(text=f"{max_amount / AMOUNT_MULTIPLIER:,.2f}")
+        self.max_amount_label.configure(text=format_amount_with_separator(max_amount))
 
         print(f"[DEBUG] 顶部统计已更新:")
-        print(f"  今日总下注: {total_bet / AMOUNT_MULTIPLIER:.2f}")
+        print(f"  今日总下注: {format_amount_with_separator(total_bet)}")
         print(f"  非零生肖: {non_zero_count}")
         print(f"  最高下注生肖: {max_zodiac}")
-        print(f"  最高金额: {max_amount / AMOUNT_MULTIPLIER:.2f}")
+        print(f"  最高金额: {format_amount_with_separator(max_amount)}")
 
     def _save_input_history(self, batch_id, raw_input, instructions, result, animal_mapping, play_mode='number'):
         """保存输入历史记录 - 失败时抛出异常"""

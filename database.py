@@ -194,6 +194,47 @@ class Database:
                 ON settlements(settlement_date)
             """)
 
+            # 平特一肖独立表
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS flat_zodiac_batches (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ledger_id INTEGER NOT NULL,
+                    raw_input TEXT NOT NULL,
+                    entry_total REAL NOT NULL DEFAULT 0,
+                    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'undone')),
+                    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                    FOREIGN KEY (ledger_id) REFERENCES ledgers(id) ON DELETE CASCADE
+                )
+            """)
+
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS flat_zodiac_items (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    batch_id INTEGER NOT NULL,
+                    zodiac TEXT NOT NULL CHECK(zodiac IN ('鼠','牛','虎','兔','龙','蛇','马','羊','猴','鸡','狗','猪')),
+                    amount REAL NOT NULL DEFAULT 0,
+                    odds REAL NOT NULL DEFAULT 1.0,
+                    payout REAL NOT NULL DEFAULT 0,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now', 'localtime')),
+                    FOREIGN KEY (batch_id) REFERENCES flat_zodiac_batches(id) ON DELETE CASCADE
+                )
+            """)
+
+            # 平特一肖索引
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_flat_zodiac_batches_ledger_status
+                ON flat_zodiac_batches(ledger_id, status)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_flat_zodiac_batches_created
+                ON flat_zodiac_batches(created_at)
+            """)
+            cursor.execute("""
+                CREATE INDEX IF NOT EXISTS idx_flat_zodiac_items_batch
+                ON flat_zodiac_items(batch_id)
+            """)
+
             # v1.0已归档账本没有结算字段，升级时按现有明细补算一次。
             cursor.execute("""
                 UPDATE ledgers

@@ -4,7 +4,7 @@
 """
 
 import tkinter as tk
-from constants import AMOUNT_MULTIPLIER
+from format_utils import format_amount
 
 
 class AnimalResultTable(tk.Frame):
@@ -124,13 +124,13 @@ class AnimalResultTable(tk.Frame):
         """计算列宽度"""
         return {key: width * w for key, w in self.col_widths.items()}
 
-    def update_data(self, animal_amounts: dict, total_amount: int):
+    def update_data(self, animal_amounts: dict, total_amount: float):
         """
         更新表格数据
 
         Args:
-            animal_amounts: {生肖: 金额整数}
-            total_amount: 总金额整数
+            animal_amounts: {生肖: 金额（元，浮点数）}
+            total_amount: 总金额（元，浮点数）
         """
         self.animal_amounts = animal_amounts
         self.total_amount = total_amount
@@ -157,15 +157,13 @@ class AnimalResultTable(tk.Frame):
             # 绘制背景
             self.data_canvas.create_rectangle(
                 0, y, width, y + self.row_height,
-                fill=bg_color,
-                outline=""
+                fill=bg_color, outline=""
             )
 
-            # 获取数据
-            amount_int = self.animal_amounts.get(animal, 0)
-            amount = amount_int / AMOUNT_MULTIPLIER
-            payout = int(amount_int * self.odds) / AMOUNT_MULTIPLIER
-            profit = (int(amount_int * self.odds) - self.total_amount) / AMOUNT_MULTIPLIER
+            # 获取金额（元）
+            amount = self.animal_amounts.get(animal, 0)
+            payout = amount * self.odds
+            profit = self.total_amount - payout
 
             # 生肖名（居中）
             self.data_canvas.create_text(
@@ -177,11 +175,11 @@ class AnimalResultTable(tk.Frame):
             )
 
             # 金额（右对齐）
-            amount_color = "#0066CC" if amount_int > 0 else "#999999"
+            amount_color = "#0066CC" if amount > 0 else "#999999"
             self.data_canvas.create_text(
                 col_x['amount'] + col_w['amount'] - 10,
                 y + self.row_height / 2,
-                text=f"{amount:,.2f}" if amount_int > 0 else "--",
+                text=format_amount(amount) if amount > 0 else "--",
                 fill=amount_color,
                 font=("Consolas", 11),
                 anchor='e'
@@ -191,26 +189,26 @@ class AnimalResultTable(tk.Frame):
             self.data_canvas.create_text(
                 col_x['odds'] + col_w['odds'] / 2,
                 y + self.row_height / 2,
-                text=f"{self.odds:.2f}",
+                text=format_amount(self.odds),
                 fill="#666666",
                 font=("Consolas", 10)
             )
 
             # 赔付（右对齐）
-            if amount_int > 0:
+            if amount > 0:
                 self.data_canvas.create_text(
                     col_x['payout'] + col_w['payout'] - 10,
                     y + self.row_height / 2,
-                    text=f"{payout:,.2f}",
+                    text=format_amount(payout),
                     fill="#00AA00",
                     font=("Consolas", 11),
                     anchor='e'
                 )
 
             # 盈利（右对齐，根据正负显示颜色）
-            if amount_int > 0:
+            if amount > 0:
                 profit_color = "#DD0000" if profit >= 0 else "#006600"
-                profit_text = f"+{profit:,.2f}" if profit >= 0 else f"{profit:,.2f}"
+                profit_text = f"+{format_amount(profit)}" if profit >= 0 else format_amount(profit)
                 self.data_canvas.create_text(
                     col_x['profit'] + col_w['profit'] - 10,
                     y + self.row_height / 2,
@@ -224,7 +222,6 @@ class AnimalResultTable(tk.Frame):
 
         # 更新滚动区域
         self.data_canvas.config(scrollregion=(0, 0, width, y))
-
     def clear(self):
         """清空表格数据"""
         self.animal_amounts = {animal: 0 for animal in self.animals}
