@@ -21,8 +21,8 @@ class HistoryWindow(ctk.CTkToplevel):
 
         # 窗口设置
         from play_mode import PlayMode
-        mode_name = "号码模式" if current_mode == PlayMode.NUMBER else "平特一肖模式"
-        self.title(f"历史记录 - {mode_name}")
+        mode_name = "号码模式历史" if current_mode == PlayMode.NUMBER else "平特模式历史"
+        self.title(mode_name)
         self.geometry("800x650")
 
         # 计算本周起始日期
@@ -41,7 +41,7 @@ class HistoryWindow(ctk.CTkToplevel):
         header.pack(fill='x')
         header.pack_propagate(False)
 
-        mode_name = "号码模式" if self.current_mode == PlayMode.NUMBER else "平特一肖模式"
+        mode_name = "号码模式历史" if self.current_mode == PlayMode.NUMBER else "平特模式历史"
 
         ctk.CTkLabel(
             header,
@@ -55,8 +55,17 @@ class HistoryWindow(ctk.CTkToplevel):
                 header,
                 text=f"账本 {self.current_ledger.ledger_date}",
                 font=("Arial", 11),
-                text_color="#AAAAAA"
+                text_color="#BBBBBB"
             ).pack(side='left', padx=5)
+
+        # 本周日期范围
+        week_end = self.week_start + timedelta(days=6)
+        ctk.CTkLabel(
+            header,
+            text=f"本周 {self.week_start.strftime('%m/%d')}-{week_end.strftime('%m/%d')}",
+            font=("Arial", 11),
+            text_color="#999999"
+        ).pack(side='left', padx=10)
 
         # 滚动区域
         self.scroll_frame = ctk.CTkScrollableFrame(self, fg_color="#F0F0F0")
@@ -218,9 +227,13 @@ class NumberRecordCard:
 
         # 卡片容器
         self.card = ctk.CTkFrame(parent, fg_color="#FFFFFF", corner_radius=6)
-        self.card.pack(fill='x', pady=4, padx=12)
+        self.card.pack(fill='x', pady=6, padx=12)
 
         self._build_ui()
+
+        # 分隔线
+        separator = ctk.CTkFrame(parent, fg_color="#DDDDDD", height=1)
+        separator.pack(fill='x', padx=12, pady=0)
 
     def _build_ui(self):
         """构建UI"""
@@ -281,28 +294,28 @@ class NumberRecordCard:
         ctk.CTkLabel(
             summary,
             text=f"本次金额：",
-            font=("Microsoft YaHei", 11),
+            font=("Microsoft YaHei", 12),
             text_color="#666666"
         ).pack(side='left')
 
         ctk.CTkLabel(
             summary,
             text=format_amount(entry_total),
-            font=("Microsoft YaHei", 13, "bold"),
-            text_color="#0066CC"
+            font=("Microsoft YaHei", 14, "bold"),
+            text_color="#222222"
         ).pack(side='left', padx=(2, 15))
 
         ctk.CTkLabel(
             summary,
             text=f"涉及号码：",
-            font=("Microsoft YaHei", 11),
+            font=("Microsoft YaHei", 12),
             text_color="#666666"
         ).pack(side='left')
 
         ctk.CTkLabel(
             summary,
             text=f"{count}个",
-            font=("Microsoft YaHei", 11, "bold"),
+            font=("Microsoft YaHei", 12, "bold"),
             text_color="#333333"
         ).pack(side='left')
 
@@ -313,9 +326,9 @@ class NumberRecordCard:
         if expanded_items and count > 0:
             self.toggle_btn = ctk.CTkButton(
                 content,
-                text="▼ 查看展开详情",
+                text="▶ 查看详情",
                 command=self._toggle_detail,
-                width=120,
+                width=110,
                 height=28,
                 fg_color="#E0E0E0",
                 hover_color="#D0D0D0",
@@ -329,13 +342,13 @@ class NumberRecordCard:
         if self.expanded:
             # 收起
             self.detail_frame.pack_forget()
-            self.toggle_btn.configure(text="▼ 查看展开详情")
+            self.toggle_btn.configure(text="▶ 查看详情")
             self.expanded = False
         else:
             # 展开
             self._render_detail()
             self.detail_frame.pack(fill='x', pady=(8, 8), before=self.toggle_btn)
-            self.toggle_btn.configure(text="▲ 收起详情")
+            self.toggle_btn.configure(text="▼ 收起详情")
             self.expanded = True
 
     def _render_detail(self):
@@ -418,9 +431,13 @@ class FlatZodiacRecordCard:
 
         # 卡片容器
         self.card = ctk.CTkFrame(parent, fg_color="#FFFFFF", corner_radius=6)
-        self.card.pack(fill='x', pady=4, padx=12)
+        self.card.pack(fill='x', pady=6, padx=12)
 
         self._build_ui()
+
+        # 分隔线
+        separator = ctk.CTkFrame(parent, fg_color="#DDDDDD", height=1)
+        separator.pack(fill='x', padx=12, pady=0)
 
     def _build_ui(self):
         """构建UI"""
@@ -519,28 +536,28 @@ class FlatZodiacRecordCard:
         ctk.CTkLabel(
             summary,
             text=f"本次金额：",
-            font=("Microsoft YaHei", 11),
+            font=("Microsoft YaHei", 12),
             text_color="#666666"
         ).pack(side='left')
 
         ctk.CTkLabel(
             summary,
             text=format_amount(entry_total),
-            font=("Microsoft YaHei", 13, "bold"),
-            text_color="#0066CC"
+            font=("Microsoft YaHei", 14, "bold"),
+            text_color="#222222"
         ).pack(side='left', padx=(2, 15))
 
         ctk.CTkLabel(
             summary,
             text=f"涉及生肖：",
-            font=("Microsoft YaHei", 11),
+            font=("Microsoft YaHei", 12),
             text_color="#666666"
         ).pack(side='left')
 
         ctk.CTkLabel(
             summary,
             text=f"{count}个",
-            font=("Microsoft YaHei", 11, "bold"),
+            font=("Microsoft YaHei", 12, "bold"),
             text_color="#333333"
         ).pack(side='left')
 
