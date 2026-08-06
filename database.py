@@ -148,6 +148,26 @@ class Database:
                 )
             """)
 
+            # input_history表 - 输入历史记录
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS input_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    ledger_id INTEGER NOT NULL,
+                    batch_id INTEGER,
+                    record_date TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                    raw_input TEXT NOT NULL,
+                    parsed_summary TEXT NOT NULL,
+                    expanded_items_json TEXT NOT NULL,
+                    entry_total INTEGER NOT NULL,
+                    daily_total_after INTEGER NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    week_start TEXT NOT NULL,
+                    FOREIGN KEY (ledger_id) REFERENCES ledgers(id) ON DELETE CASCADE,
+                    FOREIGN KEY (batch_id) REFERENCES batches(id) ON DELETE SET NULL
+                )
+            """)
+
             # 创建索引
             cursor.execute("""
                 CREATE INDEX IF NOT EXISTS idx_ledgers_date
@@ -531,6 +551,62 @@ class Database:
 
         return sources
 
+    def get_ledger_totals_by_mode(self, ledger_id: int, play_mode: str) -> Dict:
+        """
+        统一查询接口：根据玩法模式返回对应维度的累计
+
+        Args:
+            ledger_id: 账本ID
+            play_mode: 玩法模式 ('number', 'flat_zodiac', 'wave', 'tail', 等)
+
+        Returns:
+            号码模式: {号码(int): 金额整数}
+            生肖模式: {生肖(str): 金额整数}
+            其他模式: {目标(str): 金额整数}
+        """
+        cursor = self.conn.cursor()
+
+        if play_mode == 'number':
+            # 号码模式：从 allocations 查询
+            cursor.execute("""
+                SELECT a.number, SUM(a.amount_integer) as total
+                FROM allocations a
+                JOIN instructions i ON a.instruction_id = i.id
+                JOIN batches b ON i.batch_id = b.id
+                WHERE b.ledger_id = ?
+                GROUP BY a.number
+            """, (ledger_id,))
+
+            totals = {i: 0 for i in range(MIN_NUMBER, MAX_NUMBER + 1)}
+            for row in cursor.fetchall():
+                totals[row['number']] = row['total']
+
+            return totals
+        else:
+            # 生肖模式（平特一肖、波色、尾数等）：从 instructions 查询
+            cursor.execute("""
+                SELECT i.targets, i.amount_integer
+                FROM instructions i
+                JOIN batches b ON i.batch_id = b.id
+                WHERE b.ledger_id = ? AND b.play_mode = ?
+                ORDER BY b.created_at, i.source_line
+            """, (ledger_id, play_mode))
+
+            totals = {}
+            for row in cursor.fetchall():
+                # targets 是 JSON 数组字符串，如 '["虎"]'
+                import json
+                targets = json.loads(row['targets'])
+                amount = row['amount_integer']
+
+                # 累加到每个目标
+                for target in targets:
+                    if target not in totals:
+                        totals[target] = 0
+                    totals[target] += amount
+
+            return totals
+
     def _calculate_ledger_total(self, cursor, ledger_id: int) -> int:
         """使用指定游标计算账本总金额。"""
         cursor.execute("""
@@ -796,3 +872,113 @@ class Database:
                 'created_at': row['created_at']
             })
         return results
+
+    def save_input_history(self, ledger_id: int, batch_id: Optional[int], record_date: str,
+                          raw_input: str, parsed_summary: str, expanded_items: List[Dict],
+                          entry_total: int, daily_total_after: int, week_start: str, play_mode: str = 'number'):
+        """保存输入历史记录"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                INSERT INTO input_history (
+                    ledger_id, batch_id, record_date, raw_input, parsed_summary,
+                    expanded_items_json, entry_total, daily_total_after, status, week_start, play_mode
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)
+            """, (
+                ledger_id, batch_id, record_date, raw_input, parsed_summary,
+                json.dumps(expanded_items, ensure_ascii=False),
+                entry_total, daily_total_after, week_start, play_mode
+            ))
+            self.conn.commit()
+            return cursor.lastrowid
+        except sqlite3.Error as e:
+            self.conn.rollback()
+            raise DatabaseError(f"保存输入历史失败: {e}")
+
+    def get_input_history_by_week(self, week_start: str, play_mode: str = None) -> List[Dict]:
+        """获取指定周的输入历史记录，可按玩法模式过滤"""
+        try:
+            cursor = self.conn.cursor()
+
+            if play_mode:
+                # 按玩法模式过滤
+                cursor.execute("""
+                    SELECT id, ledger_id, batch_id, record_date, created_at, raw_input,
+                           parsed_summary, expanded_items_json, entry_total, daily_total_after, status, play_mode
+                    FROM input_history
+                    WHERE week_start = ? AND play_mode = ?
+                    ORDER BY record_date DESC, created_at DESC
+                """, (week_start, play_mode))
+            else:
+                # 不过滤，获取所有（向后兼容）
+                cursor.execute("""
+                    SELECT id, ledger_id, batch_id, record_date, created_at, raw_input,
+                           parsed_summary, expanded_items_json, entry_total, daily_total_after, status, play_mode
+                    FROM input_history
+                WHERE week_start = ?
+                ORDER BY record_date DESC, created_at DESC
+            """, (week_start,))
+
+            results = []
+            for row in cursor.fetchall():
+                results.append({
+                    'id': row['id'],
+                    'ledger_id': row['ledger_id'],
+                    'batch_id': row['batch_id'],
+                    'record_date': row['record_date'],
+                    'created_at': row['created_at'],
+                    'raw_input': row['raw_input'],
+                    'parsed_summary': row['parsed_summary'],
+                    'expanded_items': json.loads(row['expanded_items_json']),
+                    'entry_total': row['entry_total'],
+                    'daily_total_after': row['daily_total_after'],
+                    'status': row['status'],
+                    'play_mode': row.get('play_mode', 'number')  # 向后兼容
+                })
+            return results
+        except sqlite3.Error as e:
+            raise DatabaseError(f"获取输入历史失败: {e}")
+
+    def mark_history_as_undone(self, history_id: int):
+        """将历史记录标记为已撤销"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                UPDATE input_history
+                SET status = 'undone'
+                WHERE id = ?
+            """, (history_id,))
+            self.conn.commit()
+        except sqlite3.Error as e:
+            self.conn.rollback()
+            raise DatabaseError(f"标记历史记录失败: {e}")
+
+    def get_latest_active_history(self, ledger_id: int) -> Optional[Dict]:
+        """获取指定账本的最新有效历史记录"""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                SELECT id, batch_id, record_date, created_at, raw_input,
+                       parsed_summary, expanded_items_json, entry_total, daily_total_after
+                FROM input_history
+                WHERE ledger_id = ? AND status = 'active'
+                ORDER BY created_at DESC
+                LIMIT 1
+            """, (ledger_id,))
+
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'id': row['id'],
+                    'batch_id': row['batch_id'],
+                    'record_date': row['record_date'],
+                    'created_at': row['created_at'],
+                    'raw_input': row['raw_input'],
+                    'parsed_summary': row['parsed_summary'],
+                    'expanded_items': json.loads(row['expanded_items_json']),
+                    'entry_total': row['entry_total'],
+                    'daily_total_after': row['daily_total_after']
+                }
+            return None
+        except sqlite3.Error as e:
+            raise DatabaseError(f"获取最新历史记录失败: {e}")

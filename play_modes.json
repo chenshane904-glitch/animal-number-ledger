@@ -1,0 +1,21 @@
+{
+  "number": {
+    "name": "号码模式",
+    "description": "传统49号码玩法，包含生肖、波色、单双等",
+    "expand_numbers": true,
+    "odds": 47,
+    "display_type": "numbers",
+    "count": 49
+  },
+  "flat_zodiac": {
+    "name": "平特模式",
+    "description": "十二生肖平特玩法，不展开号码",
+    "expand_numbers": false,
+    "odds": 1.0,
+    "display_type": "animals",
+    "animals": [
+      "鼠", "牛", "虎", "兔", "龙", "蛇",
+      "马", "羊", "猴", "鸡", "狗", "猪"
+    ]
+  }
+}

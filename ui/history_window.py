@@ -1,249 +1,439 @@
-"""历史记录窗口"""
+# -*- coding: utf-8 -*-
+"""
+输入历史记录窗口
+"""
+
 import customtkinter as ctk
 from tkinter import messagebox, filedialog
-from database import Database, DatabaseError
-from backup import BackupManager, BackupError
-from constants import DELETE_CONFIRMATION, DELETE_ALL_CONFIRMATION, AMOUNT_MULTIPLIER, MIN_NUMBER, MAX_NUMBER
+from datetime import datetime, timedelta
+from typing import List, Dict
+import csv
+from constants import AMOUNT_MULTIPLIER
 
 
 class HistoryWindow(ctk.CTkToplevel):
-    """历史记录窗口"""
+    """输入历史记录窗口"""
 
-    def __init__(self, parent, db: Database, backup_manager: BackupManager, active_ledger_id: int):
+    def __init__(self, parent, db, current_ledger):
         super().__init__(parent)
 
         self.db = db
-        self.backup_manager = backup_manager
-        self.active_ledger_id = active_ledger_id
+        self.current_ledger = current_ledger
 
-        self.title("历史记录")
+        # 调试输出
+        import os
+        print(f"[HISTORY WINDOW] 数据库路径: {os.path.abspath(db.db_path)}")
+        print(f"[HISTORY WINDOW] 当前账本ID: {current_ledger.id if current_ledger else 'None'}")
+        print(f"[HISTORY WINDOW] 当前账本日期: {current_ledger.ledger_date if current_ledger else 'None'}")
+
+        # 窗口设置
+        self.title("输入历史记录")
         self.geometry("900x700")
 
+        # 计算当前周起止日期
+        today = datetime.now()
+        self.week_start = self._get_week_start(today)
+        week_end = self.week_start + timedelta(days=6)
+
+        # 设置UI
         self._setup_ui()
-        self._load_ledgers()
+
+        # 加载历史记录
+        self._load_history()
+
+    def _get_week_start(self, date: datetime) -> datetime:
+        """获取指定日期所在周的周一"""
+        # weekday(): 0=周一, 6=周日
+        days_since_monday = date.weekday()
+        week_start = date - timedelta(days=days_since_monday)
+        return week_start.replace(hour=0, minute=0, second=0, microsecond=0)
 
     def _setup_ui(self):
-        """设置界面"""
-        # 顶部按钮
-        top_frame = ctk.CTkFrame(self)
-        top_frame.pack(fill='x', padx=10, pady=10)
+        """设置UI"""
+        # 顶部信息栏
+        header_frame = ctk.CTkFrame(self)
+        header_frame.pack(fill='x', padx=10, pady=10)
 
-        refresh_btn = ctk.CTkButton(top_frame, text="刷新", command=self._load_ledgers)
-        refresh_btn.pack(side='left', padx=5)
+        ctk.CTkLabel(
+            header_frame,
+            text="输入历史记录",
+            font=("Arial", 16, "bold")
+        ).pack(side='left', padx=10)
 
-        delete_btn = ctk.CTkButton(
-            top_frame,
-            text="删除选中",
-            command=self._delete_selected,
-            fg_color="red"
-        )
-        delete_btn.pack(side='left', padx=5)
+        # 周信息
+        week_end = self.week_start + timedelta(days=6)
+        week_str = f"{self.week_start.strftime('%Y-%m-%d')} 至 {week_end.strftime('%Y-%m-%d')}"
+        ctk.CTkLabel(
+            header_frame,
+            text=f"本周：{week_str}",
+            font=("Arial", 12)
+        ).pack(side='left', padx=20)
 
-        delete_all_btn = ctk.CTkButton(
-            top_frame,
-            text="删除全部历史",
-            command=self._delete_all_history,
-            fg_color="darkred"
-        )
-        delete_all_btn.pack(side='left', padx=5)
+        # 账本信息
+        if self.current_ledger:
+            ctk.CTkLabel(
+                header_frame,
+                text=f"账本：{self.current_ledger.ledger_date}",
+                font=("Arial", 12)
+            ).pack(side='left', padx=10)
 
-        export_csv_btn = ctk.CTkButton(
-            top_frame,
-            text="导出CSV",
-            command=self._export_csv
-        )
-        export_csv_btn.pack(side='left', padx=5)
+        # 中间：滚动区域
+        self.scroll_frame = ctk.CTkScrollableFrame(self)
+        self.scroll_frame.pack(fill='both', expand=True, padx=10, pady=10)
 
-        # 账本列表
-        list_label = ctk.CTkLabel(self, text="历史账本：", font=("Arial", 12))
-        list_label.pack(anchor='w', padx=10, pady=(5, 5))
+        # 底部按钮栏
+        button_frame = ctk.CTkFrame(self)
+        button_frame.pack(fill='x', padx=10, pady=10)
 
-        self.ledger_listbox = ctk.CTkScrollableFrame(self, height=300)
-        self.ledger_listbox.pack(fill='both', expand=True, padx=10, pady=5)
+        ctk.CTkButton(
+            button_frame,
+            text="刷新",
+            command=self._load_history,
+            width=100,
+            height=32
+        ).pack(side='left', padx=5)
 
-        # 详情显示
-        detail_label = ctk.CTkLabel(self, text="账本详情：", font=("Arial", 12))
-        detail_label.pack(anchor='w', padx=10, pady=(10, 5))
+        ctk.CTkButton(
+            button_frame,
+            text="导出本周记录",
+            command=self._export_csv,
+            width=120,
+            height=32
+        ).pack(side='left', padx=5)
 
-        self.detail_text = ctk.CTkTextbox(self, height=250, font=("Consolas", 10))
-        self.detail_text.pack(fill='both', expand=True, padx=10, pady=5)
+        ctk.CTkButton(
+            button_frame,
+            text="关闭",
+            command=self.destroy,
+            width=100,
+            height=32
+        ).pack(side='right', padx=5)
 
-        self.selected_ledger_id = None
-        self.ledger_items = []
-
-    def _load_ledgers(self):
-        """加载账本列表"""
-        # 清空现有列表
-        for widget in self.ledger_listbox.winfo_children():
+    def _load_history(self):
+        """加载历史记录"""
+        # 清空现有内容
+        for widget in self.scroll_frame.winfo_children():
             widget.destroy()
 
-        self.ledger_items = []
+        # 获取本周历史记录
+        week_start_str = self.week_start.strftime('%Y-%m-%d')
 
-        # 获取所有账本
-        ledgers = self.db.get_all_ledgers()
+        print(f"[HISTORY QUERY] 查询周起始: {week_start_str}")
+        print(f"[HISTORY QUERY] week_start对象: {self.week_start}")
+        print(f"[HISTORY QUERY] 当前账本ID: {self.current_ledger.id if self.current_ledger else 'None'}")
 
-        for ledger in ledgers:
-            # 已归档账本显示结算时固化的金额；活动账本显示当前累计。
-            if ledger.status == 'archived' and ledger.settled_total_integer is not None:
-                total_integer = ledger.settled_total_integer
-                total_label = "结算总金额"
-            else:
-                totals = self.db.get_ledger_totals(ledger.id)
-                total_integer = sum(totals.values())
-                total_label = "当前总金额"
-            total_amount = total_integer / AMOUNT_MULTIPLIER
+        # 直接测试SQL
+        import sqlite3
+        cursor = self.db.conn.cursor()
+        cursor.execute("SELECT week_start, COUNT(*) FROM input_history GROUP BY week_start")
+        print(f"[HISTORY QUERY] 数据库中的week_start值:")
+        for row in cursor.fetchall():
+            print(f"  week_start='{row[0]}', count={row[1]}")
 
-            status_text = "活动中" if ledger.status == 'active' else "已归档"
-            is_active = ledger.id == self.active_ledger_id
+        records = self.db.get_input_history_by_week(week_start_str)
 
-            frame = ctk.CTkFrame(self.ledger_listbox)
-            frame.pack(fill='x', pady=2)
+        print(f"[HISTORY QUERY] 返回记录数: {len(records)}")
+        if len(records) > 0:
+            print(f"[HISTORY QUERY] 第一条: {records[0]['raw_input']}")
+        else:
+            print(f"[HISTORY QUERY] 查询SQL: WHERE week_start = '{week_start_str}'")
 
-            label_text = (
-                f"[{ledger.ledger_date}] 账本#{ledger.sequence_number} - "
-                f"{status_text} - {total_label}: {total_amount:.2f}"
-            )
-            if is_active:
-                label_text += " (当前)"
-
-            label = ctk.CTkLabel(
-                frame,
-                text=label_text,
-                anchor='w',
-                font=("Arial", 11)
-            )
-            label.pack(side='left', fill='x', expand=True, padx=10, pady=5)
-
-            # 点击查看详情
-            frame.bind('<Button-1>', lambda e, lid=ledger.id: self._show_ledger_detail(lid))
-            label.bind('<Button-1>', lambda e, lid=ledger.id: self._show_ledger_detail(lid))
-
-            self.ledger_items.append((ledger.id, frame, is_active))
-
-    def _show_ledger_detail(self, ledger_id: int):
-        """显示账本详情"""
-        self.selected_ledger_id = ledger_id
-
-        # 高亮选中项
-        for lid, frame, _ in self.ledger_items:
-            if lid == ledger_id:
-                frame.configure(fg_color=("gray70", "gray30"))
-            else:
-                frame.configure(fg_color=("gray86", "gray17"))
-
-        # 获取账本数据
-        ledger = self.db.get_ledger(ledger_id)
-
-        # 获取号码总数
-        totals = self.db.get_ledger_totals(ledger_id)
-
-        # 获取来源
-        sources = self.db.get_ledger_sources(ledger_id)
-
-        # 显示详情
-        lines = []
-        if ledger:
-            lines.append("=== 结算信息 ===")
-            lines.append(f"日期: {ledger.ledger_date}")
-            lines.append(f"账本编号: {ledger.sequence_number}")
-            lines.append(f"状态: {'活动中' if ledger.status == 'active' else '已归档'}")
-            if ledger.settled_total_integer is not None:
-                lines.append(
-                    f"结算总账金额: "
-                    f"{ledger.settled_total_integer / AMOUNT_MULTIPLIER:.2f}"
-                )
-            lines.append("")
-
-        lines.append("=== 01-49 结果 ===\n")
-
-        for i in range(MIN_NUMBER, MAX_NUMBER + 1):
-            amount = totals.get(i, 0) / AMOUNT_MULTIPLIER
-            if amount > 0:
-                lines.append(f"{i:02d}: {amount:.2f}")
-
-        total = sum(totals.values()) / AMOUNT_MULTIPLIER
-        non_zero = sum(1 for v in totals.values() if v > 0)
-
-        lines.append(f"\n总数: {total:.2f}")
-        lines.append(f"非零号码: {non_zero}")
-
-        lines.append("\n\n=== 号码来源 ===\n")
-        for i in range(MIN_NUMBER, MAX_NUMBER + 1):
-            if sources.get(i):
-                lines.append(f"\n{i:02d}:")
-                for source in sources[i]:
-                    lines.append(f"  • {source}")
-
-        self.detail_text.delete("1.0", "end")
-        self.detail_text.insert("1.0", '\n'.join(lines))
-
-    def _delete_selected(self):
-        """删除选中的账本"""
-        if not self.selected_ledger_id:
-            messagebox.showinfo("提示", "请先选择要删除的账本")
+        if not records:
+            ctk.CTkLabel(
+                self.scroll_frame,
+                text="本周暂无输入记录",
+                font=("Arial", 14),
+                text_color="#999999"
+            ).pack(pady=50)
             return
 
-        # 检查是否是当前活动账本
-        for lid, _, is_active in self.ledger_items:
-            if lid == self.selected_ledger_id and is_active:
-                messagebox.showerror("错误", "无法删除当前活动账本")
-                return
+        # 按日期分组
+        grouped = {}
+        for record in records:
+            date = record['record_date']
+            if date not in grouped:
+                grouped[date] = []
+            grouped[date].append(record)
 
-        # 创建确认对话框
-        dialog = ctk.CTkInputDialog(
-            text=f"永久删除选中账本？此操作不可撤销！\n\n请输入确认文本：\n{DELETE_CONFIRMATION}",
-            title="确认删除"
-        )
-        confirmation = dialog.get_input()
+        # 按日期倒序显示
+        sorted_dates = sorted(grouped.keys(), reverse=True)
 
-        if confirmation == DELETE_CONFIRMATION:
+        for date in sorted_dates:
+            # 日期标题 - 简洁样式
+            date_obj = datetime.strptime(date, '%Y-%m-%d')
+            weekday_names = ['星期一', '星期二', '星期三', '星期四', '星期五', '星期六', '星期日']
+            weekday = weekday_names[date_obj.weekday()]
+
+            date_header = ctk.CTkFrame(self.scroll_frame, fg_color="#F5F5F5", corner_radius=0)
+            date_header.pack(fill='x', pady=(5, 0))
+
+            ctk.CTkLabel(
+                date_header,
+                text=f"{date}  {weekday}",
+                font=("Arial", 12, "bold"),
+                text_color="#333333",
+                anchor='w'
+            ).pack(side='left', padx=15, pady=8)
+
+            # 当天的记录
+            for record in grouped[date]:
+                self._create_record_item(record)
+
+    def _create_record_item(self, record: Dict):
+        """创建单条记录项 - 连续流水式"""
+        from constants import AMOUNT_MULTIPLIER
+
+        # 内容容器 - 白色背景
+        content_frame = ctk.CTkFrame(self.scroll_frame, fg_color="#FFFFFF", corner_radius=0)
+        content_frame.pack(fill='x', padx=15, pady=8)
+
+        # 解析时间
+        created_at_str = record['created_at']
+        if isinstance(created_at_str, str):
             try:
-                self.db.delete_ledgers([self.selected_ledger_id])
-                messagebox.showinfo("成功", "已删除")
-                self._load_ledgers()
-                self.detail_text.delete("1.0", "end")
-                self.selected_ledger_id = None
-            except DatabaseError as e:
-                messagebox.showerror("错误", f"删除失败：{str(e)}")
-        elif confirmation:
-            messagebox.showerror("错误", "确认文本不正确")
+                created_at = datetime.fromisoformat(created_at_str)
+            except:
+                try:
+                    created_at = datetime.strptime(created_at_str, '%Y-%m-%d %H:%M:%S')
+                except:
+                    created_at = datetime.now()
+        else:
+            created_at = datetime.now()
 
-    def _delete_all_history(self):
-        """删除全部历史记录"""
-        # 创建确认对话框
-        dialog = ctk.CTkInputDialog(
-            text=f"永久删除全部历史记录？此操作不可撤销！\n\n请输入确认文本：\n{DELETE_ALL_CONFIRMATION}",
-            title="确认删除全部"
-        )
-        confirmation = dialog.get_input()
+        time_str = created_at.strftime('%Y/%m/%d %H:%M:%S')
 
-        if confirmation == DELETE_ALL_CONFIRMATION:
-            try:
-                self.db.delete_all_archived_ledgers()
-                messagebox.showinfo("成功", "已删除全部历史记录")
-                self._load_ledgers()
-                self.detail_text.delete("1.0", "end")
-                self.selected_ledger_id = None
-            except DatabaseError as e:
-                messagebox.showerror("错误", f"删除失败：{str(e)}")
-        elif confirmation:
-            messagebox.showerror("错误", "确认文本不正确")
+        # 第一行：时间（撤销状态标记）
+        time_color = "#666666"
+        time_display = time_str
+        if record.get('status') == 'undone':
+            time_display = f"{time_str} [已撤销]"
+            time_color = "#FF0000"
+
+        ctk.CTkLabel(
+            content_frame,
+            text=time_display,
+            font=("Arial", 11),
+            text_color=time_color,
+            anchor='w'
+        ).pack(fill='x', pady=(0, 3))
+
+        # 第二行：原始输入
+        ctk.CTkLabel(
+            content_frame,
+            text=record['raw_input'],
+            font=("Arial", 12, "bold"),
+            text_color="#333333",
+            anchor='w'
+        ).pack(fill='x', pady=(0, 3))
+
+        # 第三行：展开号码
+        expanded_items = record.get('expanded_items', [])
+        if expanded_items:
+            # 格式化号码列表
+            number_parts = []
+            amounts_set = set()
+
+            for item in expanded_items[:20]:  # 最多显示20个
+                number_parts.append(item['number'])
+                amounts_set.add(item['amount'])
+
+            numbers_text = "、".join(number_parts)
+            if len(expanded_items) > 20:
+                numbers_text += f" 等{len(expanded_items)}个"
+
+            # 如果所有金额相同，添加"各XX"
+            if len(amounts_set) == 1:
+                amount = list(amounts_set)[0]
+                numbers_text += f" 各{amount:.0f}"
+
+            ctk.CTkLabel(
+                content_frame,
+                text=numbers_text,
+                font=("Arial", 11),
+                text_color="#666666",
+                anchor='w',
+                wraplength=850
+            ).pack(fill='x', pady=(0, 3))
+
+        # 第四行：本次总和
+        entry_total = record['entry_total'] / AMOUNT_MULTIPLIER
+        total_text = f"【本次总和：{entry_total:.2f}】"
+
+        ctk.CTkLabel(
+            content_frame,
+            text=total_text,
+            font=("Arial", 11, "bold"),
+            text_color="#0066CC",
+            anchor='w'
+        ).pack(fill='x')
+
+        # 分隔线
+        separator = ctk.CTkFrame(self.scroll_frame, fg_color="#E0E0E0", height=1)
+        separator.pack(fill='x', pady=0)
+
+    def _show_detail(self, record: Dict):
+        """显示记录详情"""
+        detail_window = ctk.CTkToplevel(self)
+        detail_window.title("记录详情")
+        detail_window.geometry("600x500")
+
+        # 详情内容
+        detail_frame = ctk.CTkScrollableFrame(detail_window)
+        detail_frame.pack(fill='both', expand=True, padx=10, pady=10)
+
+        # 基本信息
+        ctk.CTkLabel(
+            detail_frame,
+            text=f"时间：{record['created_at']}",
+            font=("Arial", 12),
+            anchor='w'
+        ).pack(fill='x', pady=2)
+
+        ctk.CTkLabel(
+            detail_frame,
+            text=f"状态：{record['status']}",
+            font=("Arial", 12),
+            anchor='w'
+        ).pack(fill='x', pady=2)
+
+        ctk.CTkLabel(
+            detail_frame,
+            text=f"\n原始输入：",
+            font=("Arial", 12, "bold"),
+            anchor='w'
+        ).pack(fill='x', pady=5)
+
+        ctk.CTkLabel(
+            detail_frame,
+            text=record['raw_input'],
+            font=("Arial", 11),
+            anchor='w',
+            wraplength=550
+        ).pack(fill='x', padx=10)
+
+        ctk.CTkLabel(
+            detail_frame,
+            text=f"\n解析结果：",
+            font=("Arial", 12, "bold"),
+            anchor='w'
+        ).pack(fill='x', pady=5)
+
+        ctk.CTkLabel(
+            detail_frame,
+            text=record['parsed_summary'],
+            font=("Arial", 11),
+            anchor='w',
+            wraplength=550
+        ).pack(fill='x', padx=10)
+
+        # 展开号码
+        ctk.CTkLabel(
+            detail_frame,
+            text=f"\n展开号码及金额：",
+            font=("Arial", 12, "bold"),
+            anchor='w'
+        ).pack(fill='x', pady=5)
+
+        items = record['expanded_items']
+        if items:
+            for item in items[:20]:  # 最多显示20个
+                number = item['number']
+                amount = item['amount']
+                ctk.CTkLabel(
+                    detail_frame,
+                    text=f"  {number}: {amount:.2f}",
+                    font=("Arial", 11),
+                    anchor='w'
+                ).pack(fill='x', padx=10)
+
+            if len(items) > 20:
+                ctk.CTkLabel(
+                    detail_frame,
+                    text=f"  ... 共{len(items)}个号码",
+                    font=("Arial", 11),
+                    text_color="#999999",
+                    anchor='w'
+                ).pack(fill='x', padx=10)
+
+        # 汇总
+        entry_total = record['entry_total'] / AMOUNT_MULTIPLIER
+        daily_total = record['daily_total_after'] / AMOUNT_MULTIPLIER
+
+        ctk.CTkLabel(
+            detail_frame,
+            text=f"\n本次总金额：{entry_total:,.2f}",
+            font=("Arial", 12, "bold"),
+            anchor='w'
+        ).pack(fill='x', pady=5)
+
+        ctk.CTkLabel(
+            detail_frame,
+            text=f"操作后今日累计：{daily_total:,.2f}",
+            font=("Arial", 12, "bold"),
+            anchor='w'
+        ).pack(fill='x', pady=2)
+
+        # 关闭按钮
+        ctk.CTkButton(
+            detail_window,
+            text="关闭",
+            command=detail_window.destroy,
+            width=100,
+            height=32
+        ).pack(pady=10)
 
     def _export_csv(self):
-        """导出CSV"""
-        if not self.selected_ledger_id:
-            messagebox.showinfo("提示", "请先选择要导出的账本")
+        """导出本周记录为CSV"""
+        week_start_str = self.week_start.strftime('%Y-%m-%d')
+        week_end = self.week_start + timedelta(days=6)
+        week_end_str = week_end.strftime('%Y-%m-%d')
+
+        # 获取记录
+        records = self.db.get_input_history_by_week(week_start_str)
+
+        if not records:
+            messagebox.showinfo("提示", "本周暂无记录可导出")
             return
 
-        file_path = filedialog.asksaveasfilename(
+        # 选择保存路径
+        filename = f"澳门版_下注历史_{week_start_str}至{week_end_str}.csv"
+        filepath = filedialog.asksaveasfilename(
             defaultextension=".csv",
-            filetypes=[("CSV files", "*.csv"), ("All files", "*.*")],
-            initialfile=f"ledger_{self.selected_ledger_id}.csv"
+            filetypes=[("CSV文件", "*.csv")],
+            initialfile=filename
         )
 
-        if file_path:
-            try:
-                self.backup_manager.export_csv(self.selected_ledger_id, file_path)
-                messagebox.showinfo("成功", f"已导出到：\n{file_path}")
-            except BackupError as e:
-                messagebox.showerror("错误", f"导出失败：{str(e)}")
+        if not filepath:
+            return
+
+        try:
+            with open(filepath, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.writer(f)
+
+                # 表头
+                writer.writerow([
+                    '日期', '时间', '账本编号', '原始输入', '解析结果',
+                    '展开号码数', '本次金额', '今日累计', '状态'
+                ])
+
+                # 数据行
+                for record in records:
+                    date = record['record_date']
+                    time = datetime.fromisoformat(record['created_at']).strftime('%H:%M:%S')
+                    ledger_id = record['ledger_id']
+                    raw_input = record['raw_input']
+                    parsed = record['parsed_summary']
+                    item_count = len(record['expanded_items'])
+                    entry_total = record['entry_total'] / AMOUNT_MULTIPLIER
+                    daily_total = record['daily_total_after'] / AMOUNT_MULTIPLIER
+                    status = '已撤销' if record['status'] == 'undone' else '有效'
+
+                    writer.writerow([
+                        date, time, ledger_id, raw_input, parsed,
+                        item_count, f"{entry_total:.2f}", f"{daily_total:.2f}", status
+                    ])
+
+            messagebox.showinfo("成功", f"已导出 {len(records)} 条记录到：\n{filepath}")
+
+        except Exception as e:
+            messagebox.showerror("错误", f"导出失败：{e}")

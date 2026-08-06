@@ -1,0 +1,13 @@
+﻿============================================================
+�Զ�����֤��ƽ��һФ��������
+============================================================
+python : Traceback (most recent call last):
+At line:1 char:1
++ python test_final_verification.py 2>&1 | Out-File -Encoding UTF8 test ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (Traceback (most recent call last)::String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+  File "C:\Users\2SS2\animal-number-ledger\test_final_verification.py", line 25, in <module>
+    print(f"\n\u2713 ��ʼ�����")
+UnicodeEncodeError: 'gbk' codec can't encode character '\u2713' in position 2: illegal multibyte sequence

@@ -27,10 +27,6 @@ class MainWindow(ctk.CTk):
         self.app_data_dir = app_data_dir
         self.backup_manager = BackupManager(db)
 
-        # 当前玩法模式（默认号码模式）
-        from play_mode import PlayMode
-        self.current_mode = PlayMode.NUMBER
-
         # 当前账本
         self.current_ledger = None
         self.current_totals = {}
@@ -87,32 +83,6 @@ class MainWindow(ctk.CTk):
             font=("Arial", 14, "bold")
         )
         self.settlement_label.pack(side='right', padx=10)
-
-        # 模式切换按钮（在结算信息右侧）
-        mode_frame = ctk.CTkFrame(self.info_frame, fg_color="transparent")
-        mode_frame.pack(side='right', padx=(0, 20))
-
-        from play_mode import PlayMode, PLAY_MODE_NAMES
-
-        self.mode_number_btn = ctk.CTkButton(
-            mode_frame,
-            text=PLAY_MODE_NAMES[PlayMode.NUMBER],
-            width=90,
-            height=32,
-            fg_color="#1E88E5",
-            command=lambda: self._switch_mode(PlayMode.NUMBER)
-        )
-        self.mode_number_btn.pack(side='left', padx=2)
-
-        self.mode_animal_btn = ctk.CTkButton(
-            mode_frame,
-            text=PLAY_MODE_NAMES[PlayMode.FLAT_ZODIAC],
-            width=90,
-            height=32,
-            fg_color="#666666",
-            command=lambda: self._switch_mode(PlayMode.FLAT_ZODIAC)
-        )
-        self.mode_animal_btn.pack(side='left', padx=2)
 
         # 主容器（左侧38% 右侧62%）
         self.main_container = ctk.CTkFrame(self)
@@ -303,7 +273,7 @@ class MainWindow(ctk.CTk):
         help_btn.grid(row=2, column=2, sticky='ew', padx=2, pady=2)
 
 
-        # 右侧：结果显示容器
+        # 右侧：结果显示
         self.right_frame = ctk.CTkFrame(self.main_container)
         self.right_frame.grid(row=0, column=1, sticky='nsew', padx=(4, 8), pady=8)
 
@@ -313,19 +283,6 @@ class MainWindow(ctk.CTk):
         self.right_frame.grid_rowconfigure(0, weight=0)  # 统计区固定高度
         self.right_frame.grid_rowconfigure(1, weight=1)  # 表格可扩展
 
-        # 加载默认的号码模式面板
-        self._load_number_mode_panel()
-
-        # 临时调试边框
-        self.left_frame.configure(border_width=2, border_color="blue")
-        self.right_frame.configure(border_width=2, border_color="red")
-        self.main_container.configure(border_width=2, border_color="green")
-
-        # 延迟诊断布局
-        self.after(500, self._diagnose_layout)
-
-    def _load_number_mode_panel(self):
-        """加载号码模式面板（现有功能，不修改逻辑）"""
         # 顶部统计区域：四个统计栏横向排列
         stats_container = ctk.CTkFrame(self.right_frame, height=70)
         stats_container.grid(row=0, column=0, sticky='ew', padx=0, pady=(5, 5))
@@ -387,114 +344,13 @@ class MainWindow(ctk.CTk):
         self.result_table = ResultCanvasTable(self.right_frame)
         self.result_table.grid(row=1, column=0, sticky='nsew', padx=0, pady=(5, 5))
 
-    def _load_animal_mode_panel(self):
-        """加载平特模式面板"""
-        from play_mode_config import get_odds, PlayMode
-        from ui.animal_result_table import AnimalResultTable
+        # 临时调试边框
+        self.left_frame.configure(border_width=2, border_color="blue")
+        self.right_frame.configure(border_width=2, border_color="red")
+        self.main_container.configure(border_width=2, border_color="green")
 
-        # 获取平特模式赔率
-        odds = get_odds(PlayMode.FLAT_ZODIAC)
-
-        # 顶部统计区域：四个统计栏横向排列
-        stats_container = ctk.CTkFrame(self.right_frame, height=70)
-        stats_container.grid(row=0, column=0, sticky='ew', padx=0, pady=(5, 5))
-        stats_container.grid_propagate(False)
-
-        # 配置4列均分
-        for i in range(4):
-            stats_container.grid_columnconfigure(i, weight=1)
-
-        # 统计栏1：今日总下注（蓝色）
-        stats1 = ctk.CTkFrame(stats_container)
-        stats1.grid(row=0, column=0, sticky='nsew', padx=2, pady=5)
-        ctk.CTkLabel(stats1, text="今日总下注", font=("Arial", 12)).pack(pady=(5, 0))
-        self.total_label = ctk.CTkLabel(
-            stats1,
-            text="0.00",
-            font=("Arial", 20, "bold"),
-            text_color="#0066CC"
-        )
-        self.total_label.pack(pady=(0, 5))
-
-        # 统计栏2：非零生肖（绿色）
-        stats2 = ctk.CTkFrame(stats_container)
-        stats2.grid(row=0, column=1, sticky='nsew', padx=2, pady=5)
-        ctk.CTkLabel(stats2, text="非零生肖", font=("Arial", 12)).pack(pady=(5, 0))
-        self.count_label = ctk.CTkLabel(
-            stats2,
-            text="0",
-            font=("Arial", 20, "bold"),
-            text_color="#00AA00"
-        )
-        self.count_label.pack(pady=(0, 5))
-
-        # 统计栏3：最高下注生肖（橙色）
-        stats3 = ctk.CTkFrame(stats_container)
-        stats3.grid(row=0, column=2, sticky='nsew', padx=2, pady=5)
-        ctk.CTkLabel(stats3, text="最高下注生肖", font=("Arial", 12)).pack(pady=(5, 0))
-        self.max_num_label = ctk.CTkLabel(
-            stats3,
-            text="--",
-            font=("Arial", 20, "bold"),
-            text_color="#FF9800"
-        )
-        self.max_num_label.pack(pady=(0, 5))
-
-        # 统计栏4：最高金额（红色）
-        stats4 = ctk.CTkFrame(stats_container)
-        stats4.grid(row=0, column=3, sticky='nsew', padx=2, pady=5)
-        ctk.CTkLabel(stats4, text="最高金额", font=("Arial", 12)).pack(pady=(5, 0))
-        self.max_amount_label = ctk.CTkLabel(
-            stats4,
-            text="0.00",
-            font=("Arial", 20, "bold"),
-            text_color="#DD0000"
-        )
-        self.max_amount_label.pack(pady=(0, 5))
-
-        # 表格区域 - 使用AnimalResultTable组件
-        self.result_table = AnimalResultTable(self.right_frame, odds)
-        self.result_table.grid(row=1, column=0, sticky='nsew', padx=0, pady=(5, 5))
-
-    def _switch_mode(self, mode):
-        """
-        切换玩法模式
-
-        Args:
-            mode: PlayMode枚举
-        """
-        from play_mode import PlayMode
-
-        if self.current_mode == mode:
-            return  # 已经是当前模式，不需要切换
-
-        self.current_mode = mode
-
-        # 更新按钮状态
-        if mode == PlayMode.NUMBER:
-            self.mode_number_btn.configure(fg_color="#1E88E5")
-            self.mode_animal_btn.configure(fg_color="#666666")
-        else:
-            self.mode_number_btn.configure(fg_color="#666666")
-            self.mode_animal_btn.configure(fg_color="#1E88E5")
-
-        # 销毁右侧所有widget
-        for widget in self.right_frame.winfo_children():
-            widget.destroy()
-
-        # 重新配置grid权重
-        self.right_frame.grid_columnconfigure(0, weight=1)
-        self.right_frame.grid_rowconfigure(0, weight=0)
-        self.right_frame.grid_rowconfigure(1, weight=1)
-
-        # 加载对应面板
-        if mode == PlayMode.NUMBER:
-            self._load_number_mode_panel()
-        else:
-            self._load_animal_mode_panel()
-
-        # 刷新显示
-        self._update_display()
+        # 延迟诊断布局
+        self.after(500, self._diagnose_layout)
 
     def _diagnose_layout(self):
         """诊断布局间隙"""
@@ -595,20 +451,10 @@ class MainWindow(ctk.CTk):
 
     def _update_display(self):
         """更新显示"""
-        from play_mode import PlayMode
-
         # 更新日期和账本信息
         self.date_label.configure(text=f"日期: {self.current_ledger.ledger_date}")
         self.ledger_label.configure(text=f"账本编号: {self.current_ledger.sequence_number}")
 
-        # 根据当前模式更新不同的显示
-        if self.current_mode == PlayMode.NUMBER:
-            self._update_number_mode_display()
-        else:
-            self._update_animal_mode_display()
-
-    def _update_number_mode_display(self):
-        """更新号码模式显示（保持原有逻辑不变）"""
         # 获取当前累计
         self.current_totals = self.db.get_ledger_totals(self.current_ledger.id)
         self.current_sources = self.db.get_ledger_sources(self.current_ledger.id)
@@ -647,43 +493,6 @@ class MainWindow(ctk.CTk):
         rows = self._calculate_risk_rows(self.current_totals, total)
         self.result_table.set_rows(rows, total / AMOUNT_MULTIPLIER)
 
-    def _update_animal_mode_display(self):
-        """更新平特模式显示"""
-        from play_mode_config import get_animals_list, PlayMode
-
-        # 使用统一查询接口：直接获取生肖维度累计
-        animal_amounts = self.db.get_ledger_totals_by_mode(
-            self.current_ledger.id,
-            str(self.current_mode)  # 'flat_zodiac'
-        )
-
-        # 确保所有生肖都有初始值
-        animals = get_animals_list(PlayMode.FLAT_ZODIAC)
-        for animal in animals:
-            if animal not in animal_amounts:
-                animal_amounts[animal] = 0
-
-        # 计算统计
-        total = sum(animal_amounts.values())
-        non_zero = sum(1 for amt in animal_amounts.values() if amt > 0)
-
-        # 找出最大金额的生肖
-        max_animal = "--"
-        max_amount_int = 0
-        for animal, amount_int in animal_amounts.items():
-            if amount_int > max_amount_int:
-                max_amount_int = amount_int
-                max_animal = animal
-
-        # 更新统计
-        self.total_label.configure(text=f"{total / AMOUNT_MULTIPLIER:,.2f}")
-        self.count_label.configure(text=f"{non_zero}")
-        self.max_num_label.configure(text=max_animal)
-        self.max_amount_label.configure(text=f"{max_amount_int / AMOUNT_MULTIPLIER:,.2f}")
-
-        # 更新表格
-        self.result_table.update_data(animal_amounts, total)
-
 
     def _on_input_change(self):
         """输入变化时解析预览"""
@@ -694,29 +503,17 @@ class MainWindow(ctk.CTk):
             self.confirm_btn.configure(state='disabled')
             return
 
-        # 根据当前模式选择解析器
+        # 解析
         try:
-            from play_mode import PlayMode
             animal_mapping = self.db.get_animal_mapping()
-
-            if self.current_mode == PlayMode.FLAT_ZODIAC:
-                # 平特模式：使用平特专用解析器
-                from flat_zodiac_parser import FlatZodiacParser
-                parser = FlatZodiacParser()
-            else:
-                # 号码模式：使用原有解析器
-                parser = InstructionParser(animal_mapping)
-
+            parser = InstructionParser(animal_mapping)
             instructions = parser.parse_input(input_text)
 
             # 显示解析预览
             preview_lines = []
             has_warning = False
             for inst in instructions:
-                if inst.target_type == 'animal':
-                    # 平特模式：只显示生肖名称
-                    targets_str = ', '.join(inst.targets)
-                elif inst.target_type == 'number':
+                if inst.target_type == 'number':
                     targets_str = ', '.join(inst.targets)
                 else:
                     targets_str = ', '.join(inst.targets) + ' (各号)'
@@ -735,37 +532,19 @@ class MainWindow(ctk.CTk):
             self.preview_text.insert("1.0", '\n'.join(preview_lines))
             self.preview_text.configure(state='disabled')
 
-            # 根据当前模式获取计算器
-            from calculator_factory import CalculatorFactory
-            from play_mode import PlayMode
-            calculator = CalculatorFactory.get_calculator(self.current_mode, animal_mapping)
-
             # 计算本次结果
+            calculator = Calculator(animal_mapping)
             result = calculator.calculate(instructions, {i: 0 for i in range(MIN_NUMBER, MAX_NUMBER + 1)})
 
             calc_lines = []
+            for i in range(MIN_NUMBER, MAX_NUMBER + 1):
+                if result.number_amounts[i] > 0:
+                    amount = result.number_amounts[i] / AMOUNT_MULTIPLIER
+                    calc_lines.append(f"{i:02d}: {amount:.2f}")
 
-            # 根据当前模式显示不同的计算结果
-            if self.current_mode == PlayMode.NUMBER:
-                # 号码模式：显示号码列表
-                for i in range(MIN_NUMBER, MAX_NUMBER + 1):
-                    if result.number_amounts[i] > 0:
-                        amount = result.number_amounts[i] / AMOUNT_MULTIPLIER
-                        calc_lines.append(f"{i:02d}: {amount:.2f}")
-
-                total = result.total_amount / AMOUNT_MULTIPLIER
-                calc_lines.append(f"\n本次总数: {total:.2f}")
-                calc_lines.append(f"涉及号码: {result.non_zero_count}")
-            else:
-                # 平特模式：显示生肖列表
-                for animal, amount_int in result.animal_amounts.items():
-                    if amount_int > 0:
-                        amount = amount_int / AMOUNT_MULTIPLIER
-                        calc_lines.append(f"{animal}: {amount:.2f}")
-
-                total = result.total_amount / AMOUNT_MULTIPLIER
-                calc_lines.append(f"\n本次总数: {total:.2f}")
-                calc_lines.append(f"涉及生肖: {result.non_zero_count}")
+            total = result.total_amount / AMOUNT_MULTIPLIER
+            calc_lines.append(f"\n本次总数: {total:.2f}")
+            calc_lines.append(f"涉及号码: {result.non_zero_count}")
 
             self.calc_text.configure(state='normal')
             self.calc_text.delete("1.0", "end")
@@ -799,15 +578,7 @@ class MainWindow(ctk.CTk):
 
     def _confirm_add(self):
         """确认追加"""
-        print("\n" + "="*60)
-        print("[1] ENTER confirm_add()")
-        print("="*60)
-
         input_text = self.input_text.get("1.0", "end-1c").strip()
-
-        print(f"[2] 原始输入: {input_text}")
-        print(f"[3] CURRENT PLAY MODE = {self.current_mode}")
-        print(f"   类型: {type(self.current_mode)}")
 
         try:
             # 检查跨日
@@ -825,162 +596,49 @@ class MainWindow(ctk.CTk):
                 )
                 self._load_current_ledger()
 
-            # 根据当前模式选择解析器
-            from play_mode import PlayMode
+            # 解析
             animal_mapping = self.db.get_animal_mapping()
-
-            if self.current_mode == PlayMode.FLAT_ZODIAC:
-                # 平特模式：使用平特专用解析器（不展开号码）
-                from flat_zodiac_parser import FlatZodiacParser
-                parser = FlatZodiacParser()
-                print(f"[4] 使用解析器: FlatZodiacParser（平特模式，不展开号码）")
-            else:
-                # 号码模式：使用原有解析器（展开号码）
-                parser = InstructionParser(animal_mapping)
-                print(f"[4] 使用解析器: InstructionParser（号码模式，展开号码）")
-
+            parser = InstructionParser(animal_mapping)
             instructions = parser.parse_input(input_text)
 
-            print(f"[5] 解析后的指令数量: {len(instructions)}")
-            for idx, inst in enumerate(instructions):
-                print(f"   指令{idx+1}: {inst.target_type} → {inst.targets} → {inst.amount_integer / 100}")
-
-            # 根据当前模式获取计算器和当前累计
-            from calculator_factory import CalculatorFactory
-            calculator = CalculatorFactory.get_calculator(self.current_mode, animal_mapping)
-
-            print(f"[6] 获取的计算器类型: {type(calculator).__name__}")
-            print(f"   计算器类: {calculator.__class__}")
-
-            # 准备当前累计数据
-            if self.current_mode == PlayMode.FLAT_ZODIAC:
-                # 平特模式：获取生肖累计
-                from play_mode_config import get_animals_list
-                animals = get_animals_list(PlayMode.FLAT_ZODIAC)
-                current_animal_totals = {animal: 0 for animal in animals}
-
-                # 从号码累计转换为生肖累计
-                for num, amount_int in self.current_totals.items():
-                    # 使用号码模式的calculator获取number_to_animal映射
-                    number_calculator = CalculatorFactory.get_calculator(PlayMode.NUMBER, animal_mapping)
-                    animal = number_calculator.number_to_animal.get(str(num).zfill(2))
-                    if animal and animal in current_animal_totals:
-                        current_animal_totals[animal] += amount_int
-
-                print(f"[7] 开始计算，当前生肖累计: {current_animal_totals}")
-                result = calculator.calculate(instructions, current_animal_totals)
-            else:
-                # 号码模式：使用号码累计
-                print(f"[7] 开始计算，当前号码累计: {dict(list(self.current_totals.items())[:5])}...")
-                result = calculator.calculate(instructions, self.current_totals)
-
-            print(f"[8] 计算结果:")
-            print(f"   类型: {type(result).__name__}")
-            print(f"   总金额: {result.total_amount / 100}")
-            if hasattr(result, 'number_amounts'):
-                print(f"   number_amounts 前5个: {dict(list(result.number_amounts.items())[:5])}")
-            if hasattr(result, 'animal_amounts'):
-                print(f"   animal_amounts: {result.animal_amounts}")
+            # 计算
+            calculator = Calculator(animal_mapping)
+            result = calculator.calculate(instructions, self.current_totals)
 
             # 保存批次
             from models import Batch
-
-            if self.current_mode == PlayMode.FLAT_ZODIAC:
-                # 平特模式：计算总额基于生肖累计
-                total_before = sum(current_animal_totals.values())
-            else:
-                # 号码模式：计算总额基于号码累计
-                total_before = sum(self.current_totals.values())
-
             batch = Batch(
                 raw_input=input_text,
-                total_before=total_before,
+                total_before=sum(self.current_totals.values()),
                 total_after=result.total_amount,
                 mapping_snapshot=json.dumps(animal_mapping, ensure_ascii=False),
                 instructions=instructions
             )
 
-            print(f"[9] 保存批次到数据库...")
-            print(f"   模式: {self.current_mode}")
-            print(f"   之前总额: {total_before / 100:.2f}")
-            print(f"   之后总额: {result.total_amount / 100:.2f}")
+            batch_id = self.db.add_batch_with_allocations(
+                self.current_ledger.id,
+                batch,
+                animal_mapping
+            )
 
-            if self.current_mode == PlayMode.FLAT_ZODIAC:
-                # 平特模式：保存批次和指令，不保存allocations
-                # 因为平特模式是生肖维度，不需要展开成号码
-                cursor = self.db.conn.cursor()
-
-                # 保存批次
-                cursor.execute("""
-                    INSERT INTO batches
-                    (ledger_id, raw_input, total_before, total_after, mapping_snapshot, play_mode)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    self.current_ledger.id,
-                    batch.raw_input,
-                    batch.total_before,
-                    batch.total_after,
-                    batch.mapping_snapshot,
-                    'flat_zodiac'
-                ))
-                batch_id = cursor.lastrowid
-
-                # 保存指令（用于统一查询）
-                for inst in instructions:
-                    cursor.execute("""
-                        INSERT INTO instructions
-                        (batch_id, source_line, original_text, normalized_text,
-                         target_type, targets, amount_integer, warning)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        batch_id,
-                        inst.source_line,
-                        inst.original_text,
-                        inst.normalized_text,
-                        inst.target_type,
-                        json.dumps(inst.targets, ensure_ascii=False),
-                        inst.amount_integer,
-                        inst.warning
-                    ))
-
-                self.db.conn.commit()
-                print(f"   批次ID: {batch_id}（平特模式，已保存 {len(instructions)} 条指令，不保存allocations）")
-            else:
-                # 号码模式：使用原有方法保存批次和allocations
-                batch_id = self.db.add_batch_with_allocations(
-                    self.current_ledger.id,
-                    batch,
-                    animal_mapping
-                )
-                print(f"   批次ID: {batch_id}（号码模式，已保存allocations）")
-
-            # 保存输入历史记录（传入当前玩法模式）
-            print(f"[9] 保存输入历史，play_mode = {str(self.current_mode)}")
+            # 保存输入历史记录
             self._save_input_history(
                 batch_id,
                 input_text,
                 instructions,
                 result,
-                animal_mapping,
-                str(self.current_mode)
+                animal_mapping
             )
 
             # 清空输入
-            print(f"[10] 清空输入框和预览")
             self.input_text.delete("1.0", "end")
             self._clear_preview()
             self._clear_calc()
 
             # 刷新显示
-            print(f"[11] 刷新显示 (_update_display)")
             self._update_display()
 
-            print(f"[12] 显示成功消息")
             messagebox.showinfo("成功", "已追加到账本")
-
-            print("="*60)
-            print("CONFIRM_ADD 完成")
-            print("="*60 + "\n")
 
         except Exception as e:
             # 打印完整的错误堆栈
@@ -992,7 +650,7 @@ class MainWindow(ctk.CTk):
             print("="*60 + "\n")
             messagebox.showerror("错误", f"追加失败：{str(e)}")
 
-    def _save_input_history(self, batch_id, raw_input, instructions, result, animal_mapping, play_mode='number'):
+    def _save_input_history(self, batch_id, raw_input, instructions, result, animal_mapping):
         """保存输入历史记录 - 失败时抛出异常"""
         from datetime import datetime, timedelta
         import os
@@ -1003,7 +661,6 @@ class MainWindow(ctk.CTk):
         print(f"[HISTORY] 批次ID: {batch_id}")
         print(f"[HISTORY] 原始输入: {raw_input}")
         print(f"[HISTORY] 原始输入类型: {type(raw_input)}")
-        print(f"[HISTORY] 玩法模式: {play_mode}")
 
         # 计算当前周起始日期（周一）
         today = datetime.now()
@@ -1033,17 +690,9 @@ class MainWindow(ctk.CTk):
 
         for idx, item in enumerate(expanded_items):
             assert isinstance(item, dict), f"expanded_items[{idx}]必须是dict，实际是{type(item)}"
-            # 根据play_mode检查不同字段
-            if play_mode == 'flat_zodiac':
-                assert 'animal' in item, f"expanded_items[{idx}]缺少animal字段"
-            else:
-                assert 'number' in item, f"expanded_items[{idx}]缺少number字段"
+            assert 'number' in item, f"expanded_items[{idx}]缺少number字段"
             assert 'amount' in item, f"expanded_items[{idx}]缺少amount字段"
-            # number或animal的类型检查
-            if 'number' in item:
-                assert isinstance(item['number'], str), f"number必须是str，实际是{type(item['number'])}"
-            if 'animal' in item:
-                assert isinstance(item['animal'], str), f"animal必须是str，实际是{type(item['animal'])}"
+            assert isinstance(item['number'], str), f"number必须是str，实际是{type(item['number'])}"
             assert isinstance(item['amount'], (int, float)), f"amount必须是数字，实际是{type(item['amount'])}"
 
         print(f"[HISTORY] 类型检查通过")
@@ -1058,8 +707,7 @@ class MainWindow(ctk.CTk):
             expanded_items=expanded_items,
             entry_total=result.total_amount,
             daily_total_after=result.total_amount,
-            week_start=week_start_str,
-            play_mode=play_mode
+            week_start=week_start_str
         )
 
         print(f"[HISTORY INSERTED] ID: {history_id}, ledger_id: {self.current_ledger.id}, "
@@ -1123,34 +771,18 @@ class MainWindow(ctk.CTk):
             return f"{len(instructions)}条指令"
 
     def _generate_expanded_items(self, result):
-        """生成展开项列表 - 根据result类型分别处理"""
+        """生成展开项列表 - 只包含本次输入的号码"""
         items = []
-
-        # 检查result类型
-        if hasattr(result, 'number_amounts'):
-            # 号码模式：result.number_amounts是字典 {号码(int): 金额(int)}
-            for number, amount_int in result.number_amounts.items():
-                if amount_int > 0:  # 只包含本次有金额的号码
-                    amount = amount_int / AMOUNT_MULTIPLIER
-                    items.append({
-                        'number': str(number).zfill(2),  # 格式化为两位数字
-                        'amount': amount
-                    })
-            # 按号码排序
-            items.sort(key=lambda x: x['number'])
-        elif hasattr(result, 'animal_amounts'):
-            # 平特模式：result.animal_amounts是字典 {生肖(str): 金额(int)}
-            for animal, amount_int in result.animal_amounts.items():
-                if amount_int > 0:
-                    amount = amount_int / AMOUNT_MULTIPLIER
-                    items.append({
-                        'animal': animal,
-                        'amount': amount
-                    })
-            # 按生肖顺序排序
-            animal_order = ["鼠", "牛", "虎", "兔", "龙", "蛇", "马", "羊", "猴", "鸡", "狗", "猪"]
-            items.sort(key=lambda x: animal_order.index(x['animal']) if x['animal'] in animal_order else 99)
-
+        # result.number_amounts是字典: {号码(int): 金额(int)}
+        for number, amount_int in result.number_amounts.items():
+            if amount_int > 0:  # 只包含本次有金额的号码
+                amount = amount_int / AMOUNT_MULTIPLIER
+                items.append({
+                    'number': str(number).zfill(2),  # 格式化为两位数字
+                    'amount': amount
+                })
+        # 按号码排序
+        items.sort(key=lambda x: x['number'])
         return items
 
     def _undo_last(self):
