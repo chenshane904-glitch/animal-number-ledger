@@ -798,16 +798,17 @@ class MainWindow(ctk.CTk):
         self.calc_text.configure(state='disabled')
 
     def _confirm_add(self):
-        """确认追加"""
+        """确认追加 - 独立闭环版本"""
         print("\n" + "="*60)
-        print("[1] ENTER confirm_add()")
+        print("[ENTER] confirm_add()")
         print("="*60)
 
         input_text = self.input_text.get("1.0", "end-1c").strip()
 
-        print(f"[2] 原始输入: {input_text}")
-        print(f"[3] CURRENT PLAY MODE = {self.current_mode}")
-        print(f"   类型: {type(self.current_mode)}")
+        print(f"[1] 原始输入: {input_text}")
+        print(f"[2] 当前模式: {self.current_mode}")
+        print(f"[3] 当前账本ID: {self.current_ledger.id}")
+        print(f"[4] 数据库路径: {self.db.db_path}")
 
         try:
             # 检查跨日
@@ -825,165 +826,17 @@ class MainWindow(ctk.CTk):
                 )
                 self._load_current_ledger()
 
-            # 根据当前模式选择解析器
+            # 模式分支
             from play_mode import PlayMode
-            animal_mapping = self.db.get_animal_mapping()
 
             if self.current_mode == PlayMode.FLAT_ZODIAC:
-                # 平特模式：使用平特专用解析器（不展开号码）
-                from flat_zodiac_parser import FlatZodiacParser
-                parser = FlatZodiacParser()
-                print(f"[4] 使用解析器: FlatZodiacParser（平特模式，不展开号码）")
+                print(f"[5] 进入平特一肖独立流程")
+                self._confirm_add_flat_zodiac(input_text)
             else:
-                # 号码模式：使用原有解析器（展开号码）
-                parser = InstructionParser(animal_mapping)
-                print(f"[4] 使用解析器: InstructionParser（号码模式，展开号码）")
-
-            instructions = parser.parse_input(input_text)
-
-            print(f"[5] 解析后的指令数量: {len(instructions)}")
-            for idx, inst in enumerate(instructions):
-                print(f"   指令{idx+1}: {inst.target_type} → {inst.targets} → {inst.amount_integer / 100}")
-
-            # 根据当前模式获取计算器和当前累计
-            from calculator_factory import CalculatorFactory
-            calculator = CalculatorFactory.get_calculator(self.current_mode, animal_mapping)
-
-            print(f"[6] 获取的计算器类型: {type(calculator).__name__}")
-            print(f"   计算器类: {calculator.__class__}")
-
-            # 准备当前累计数据
-            if self.current_mode == PlayMode.FLAT_ZODIAC:
-                # 平特模式：获取生肖累计
-                from play_mode_config import get_animals_list
-                animals = get_animals_list(PlayMode.FLAT_ZODIAC)
-                current_animal_totals = {animal: 0 for animal in animals}
-
-                # 从号码累计转换为生肖累计
-                for num, amount_int in self.current_totals.items():
-                    # 使用号码模式的calculator获取number_to_animal映射
-                    number_calculator = CalculatorFactory.get_calculator(PlayMode.NUMBER, animal_mapping)
-                    animal = number_calculator.number_to_animal.get(str(num).zfill(2))
-                    if animal and animal in current_animal_totals:
-                        current_animal_totals[animal] += amount_int
-
-                print(f"[7] 开始计算，当前生肖累计: {current_animal_totals}")
-                result = calculator.calculate(instructions, current_animal_totals)
-            else:
-                # 号码模式：使用号码累计
-                print(f"[7] 开始计算，当前号码累计: {dict(list(self.current_totals.items())[:5])}...")
-                result = calculator.calculate(instructions, self.current_totals)
-
-            print(f"[8] 计算结果:")
-            print(f"   类型: {type(result).__name__}")
-            print(f"   总金额: {result.total_amount / 100}")
-            if hasattr(result, 'number_amounts'):
-                print(f"   number_amounts 前5个: {dict(list(result.number_amounts.items())[:5])}")
-            if hasattr(result, 'animal_amounts'):
-                print(f"   animal_amounts: {result.animal_amounts}")
-
-            # 保存批次
-            from models import Batch
-
-            if self.current_mode == PlayMode.FLAT_ZODIAC:
-                # 平特模式：计算总额基于生肖累计
-                total_before = sum(current_animal_totals.values())
-            else:
-                # 号码模式：计算总额基于号码累计
-                total_before = sum(self.current_totals.values())
-
-            batch = Batch(
-                raw_input=input_text,
-                total_before=total_before,
-                total_after=result.total_amount,
-                mapping_snapshot=json.dumps(animal_mapping, ensure_ascii=False),
-                instructions=instructions
-            )
-
-            print(f"[9] 保存批次到数据库...")
-            print(f"   模式: {self.current_mode}")
-            print(f"   之前总额: {total_before / 100:.2f}")
-            print(f"   之后总额: {result.total_amount / 100:.2f}")
-
-            if self.current_mode == PlayMode.FLAT_ZODIAC:
-                # 平特模式：保存批次和指令，不保存allocations
-                # 因为平特模式是生肖维度，不需要展开成号码
-                cursor = self.db.conn.cursor()
-
-                # 保存批次
-                cursor.execute("""
-                    INSERT INTO batches
-                    (ledger_id, raw_input, total_before, total_after, mapping_snapshot, play_mode)
-                    VALUES (?, ?, ?, ?, ?, ?)
-                """, (
-                    self.current_ledger.id,
-                    batch.raw_input,
-                    batch.total_before,
-                    batch.total_after,
-                    batch.mapping_snapshot,
-                    'flat_zodiac'
-                ))
-                batch_id = cursor.lastrowid
-
-                # 保存指令（用于统一查询）
-                for inst in instructions:
-                    cursor.execute("""
-                        INSERT INTO instructions
-                        (batch_id, source_line, original_text, normalized_text,
-                         target_type, targets, amount_integer, warning)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """, (
-                        batch_id,
-                        inst.source_line,
-                        inst.original_text,
-                        inst.normalized_text,
-                        inst.target_type,
-                        json.dumps(inst.targets, ensure_ascii=False),
-                        inst.amount_integer,
-                        inst.warning
-                    ))
-
-                self.db.conn.commit()
-                print(f"   批次ID: {batch_id}（平特模式，已保存 {len(instructions)} 条指令，不保存allocations）")
-            else:
-                # 号码模式：使用原有方法保存批次和allocations
-                batch_id = self.db.add_batch_with_allocations(
-                    self.current_ledger.id,
-                    batch,
-                    animal_mapping
-                )
-                print(f"   批次ID: {batch_id}（号码模式，已保存allocations）")
-
-            # 保存输入历史记录（传入当前玩法模式）
-            print(f"[9] 保存输入历史，play_mode = {str(self.current_mode)}")
-            self._save_input_history(
-                batch_id,
-                input_text,
-                instructions,
-                result,
-                animal_mapping,
-                str(self.current_mode)
-            )
-
-            # 清空输入
-            print(f"[10] 清空输入框和预览")
-            self.input_text.delete("1.0", "end")
-            self._clear_preview()
-            self._clear_calc()
-
-            # 刷新显示
-            print(f"[11] 刷新显示 (_update_display)")
-            self._update_display()
-
-            print(f"[12] 显示成功消息")
-            messagebox.showinfo("成功", "已追加到账本")
-
-            print("="*60)
-            print("CONFIRM_ADD 完成")
-            print("="*60 + "\n")
+                print(f"[5] 进入号码模式流程")
+                self._confirm_add_number_mode(input_text)
 
         except Exception as e:
-            # 打印完整的错误堆栈
             import traceback
             print("\n" + "="*60)
             print("追加失败 - 完整错误堆栈:")
@@ -991,6 +844,151 @@ class MainWindow(ctk.CTk):
             traceback.print_exc()
             print("="*60 + "\n")
             messagebox.showerror("错误", f"追加失败：{str(e)}")
+
+    def _confirm_add_flat_zodiac(self, input_text: str):
+        """平特一肖独立追加流程"""
+        from flat_zodiac_service import FlatZodiacService
+
+        # 创建服务
+        service = FlatZodiacService(self.db.conn)
+
+        # 解析输入
+        print(f"[6] 解析输入...")
+        entries = service.parse_input(input_text)
+        print(f"[7] 解析成功: {len(entries)} 条记录")
+        for e in entries:
+            print(f"    {e.zodiac} = {e.amount:.2f}")
+
+        # 计算本次总额
+        entry_total = sum(e.amount for e in entries)
+        print(f"[8] 本次总额: {entry_total:.2f}")
+
+        # 写入数据库（事务）
+        print(f"[9] 写入数据库...")
+        batch_id = service.add_batch(self.current_ledger.id, input_text, entries)
+        print(f"[10] 数据库提交成功，批次ID: {batch_id}")
+        print(f"[11] 写入items数量: {len(entries)}")
+
+        # 重新查询
+        print(f"[12] 重新查询汇总...")
+        summary = service.get_summary(self.current_ledger.id)
+        print(f"[13] 查询成功:")
+        print(f"     总下注: {summary['total_bet'] / AMOUNT_MULTIPLIER:.2f}")
+        for zodiac in ['虎', '龙', '鼠', '牛', '兔', '蛇', '马', '羊', '猴', '鸡', '狗', '猪']:
+            if summary['zodiac_amounts'].get(zodiac, 0) > 0:
+                print(f"     {zodiac}累计: {summary['zodiac_amounts'][zodiac] / AMOUNT_MULTIPLIER:.2f}")
+
+        # 刷新右侧12生肖表
+        print(f"[14] 刷新右侧12生肖表...")
+        self._refresh_flat_zodiac_display(summary)
+        print(f"[15] 右侧刷新完成")
+
+        # 刷新顶部统计
+        print(f"[16] 刷新顶部统计...")
+        self._refresh_flat_zodiac_stats(summary)
+        print(f"[17] 顶部统计刷新完成")
+
+        # 清空输入
+        self.input_text.delete("1.0", "end")
+        self._clear_preview()
+        self._clear_calc()
+
+        # 最后才显示成功
+        print(f"[18] 显示追加成功消息")
+        messagebox.showinfo("成功", "已追加到账本")
+
+        print("="*60)
+        print("[DONE] 平特一肖追加完成")
+        print("="*60 + "\n")
+
+    def _confirm_add_number_mode(self, input_text: str):
+        """号码模式原有追加流程（完全保持不变）"""
+        from play_mode import PlayMode
+        from calculator_factory import CalculatorFactory
+        from models import Batch
+
+        animal_mapping = self.db.get_animal_mapping()
+
+        # 号码模式：使用原有解析器
+        parser = InstructionParser(animal_mapping)
+        instructions = parser.parse_input(input_text)
+
+        # 号码模式：使用原有计算器
+        calculator = CalculatorFactory.get_calculator(PlayMode.NUMBER, animal_mapping)
+        result = calculator.calculate(instructions, self.current_totals)
+
+        # 保存批次
+        batch = Batch(
+            raw_input=input_text,
+            total_before=sum(self.current_totals.values()),
+            total_after=result.total_amount,
+            mapping_snapshot=json.dumps(animal_mapping, ensure_ascii=False),
+            instructions=instructions
+        )
+
+        batch_id = self.db.add_batch_with_allocations(
+            self.current_ledger.id,
+            batch,
+            animal_mapping
+        )
+
+        # 保存输入历史
+        self._save_input_history(
+            batch_id,
+            input_text,
+            instructions,
+            result,
+            animal_mapping,
+            'number'
+        )
+
+        # 清空输入
+        self.input_text.delete("1.0", "end")
+        self._clear_preview()
+        self._clear_calc()
+
+        # 刷新显示
+        self._update_display()
+
+        # 显示成功
+        messagebox.showinfo("成功", "已追加到账本")
+
+
+    def _refresh_flat_zodiac_display(self, summary: dict):
+        """刷新右侧12生肖表格显示"""
+        from constants import AMOUNT_MULTIPLIER
+
+        zodiac_amounts = summary['zodiac_amounts']
+        total_bet = summary['total_bet']
+
+        # 更新表格
+        self.result_table.update_data(zodiac_amounts, total_bet)
+
+        print(f"[DEBUG] 右侧表格已更新:")
+        for zodiac, amount in zodiac_amounts.items():
+            if amount > 0:
+                print(f"  {zodiac}: {amount / AMOUNT_MULTIPLIER:.2f}")
+
+    def _refresh_flat_zodiac_stats(self, summary: dict):
+        """刷新顶部统计显示"""
+        from constants import AMOUNT_MULTIPLIER
+
+        total_bet = summary['total_bet']
+        non_zero_count = summary['non_zero_count']
+        max_zodiac = summary['max_zodiac']
+        max_amount = summary['max_amount']
+
+        # 更新顶部统计标签
+        self.total_label.configure(text=f"{total_bet / AMOUNT_MULTIPLIER:,.2f}")
+        self.count_label.configure(text=f"{non_zero_count}")
+        self.max_num_label.configure(text=max_zodiac)
+        self.max_amount_label.configure(text=f"{max_amount / AMOUNT_MULTIPLIER:,.2f}")
+
+        print(f"[DEBUG] 顶部统计已更新:")
+        print(f"  今日总下注: {total_bet / AMOUNT_MULTIPLIER:.2f}")
+        print(f"  非零生肖: {non_zero_count}")
+        print(f"  最高下注生肖: {max_zodiac}")
+        print(f"  最高金额: {max_amount / AMOUNT_MULTIPLIER:.2f}")
 
     def _save_input_history(self, batch_id, raw_input, instructions, result, animal_mapping, play_mode='number'):
         """保存输入历史记录 - 失败时抛出异常"""
