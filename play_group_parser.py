@@ -80,13 +80,15 @@ class PlayGroupParser:
 
         # 按玩法名称长度降序匹配（最长优先）
         for play_name in self.play_names:
-            # 转义玩法名称中的特殊字符
-            escaped_name = re.escape(play_name)
-            # 查找所有匹配位置
-            pattern = rf'{escaped_name}'
-            for match in re.finditer(pattern, text):
-                start = match.start()
-                end = match.end()
+            # 直接查找玩法名称
+            start_pos = 0
+            while True:
+                pos = text.find(play_name, start_pos)
+                if pos == -1:
+                    break
+
+                start = pos
+                end = pos + len(play_name)
 
                 # 检查是否与已找到的玩法重叠
                 overlaps = False
@@ -97,6 +99,8 @@ class PlayGroupParser:
 
                 if not overlaps:
                     found_plays.append((play_name, start, end))
+
+                start_pos = pos + 1
 
         # 按位置排序
         found_plays.sort(key=lambda x: x[1])

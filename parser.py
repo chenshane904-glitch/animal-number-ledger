@@ -12,6 +12,7 @@ from constants import (
     EACH_SYNONYMS, DEFAULT_ANIMAL_MAPPING
 )
 from models import Instruction
+from play_group_parser import PlayGroupsLoader, PlayGroupParser
 
 
 class ParserError(Exception):
@@ -24,6 +25,14 @@ class InstructionParser:
 
     def __init__(self, animals: dict):
         self.animals = animals
+
+        # 加载组合玩法
+        try:
+            self.play_loader = PlayGroupsLoader()
+            self.play_parser = PlayGroupParser(self.play_loader)
+        except Exception as e:
+            # 如果配置文件不存在或有错误，抛出明确错误
+            raise ParserError(f"组合玩法配置加载失败: {e}")
 
     def _chinese_to_number(self, text: str) -> str:
         """转换中文数字为阿拉伯数字"""
@@ -249,6 +258,20 @@ class InstructionParser:
                 continue
 
             # 从目标部分提取动物和号码
+            # 先识别组合玩法
+            play_groups_found = []
+            target_after_plays = target_part
+
+            plays = self.play_parser.extract_play_groups(target_part)
+            if plays:
+                for play_name, start, end in reversed(plays):
+                    numbers = self.play_parser.expand_play_group(play_name)
+                    if numbers:
+                        play_groups_found.extend(numbers)
+                        target_after_plays = target_after_plays[:start] + target_after_plays[end:]
+                target_part = target_after_plays.strip()
+
+            # 提取动物
             animals_found = []
             for char in target_part:
                 if char in self.animals:
@@ -265,24 +288,25 @@ class InstructionParser:
                 except ValueError:
                     pass
 
-            # 合并动物和号码（不去重动物和号码，保留所有重复）
-            # 动物：保留所有，包括重复
-            # 号码：也保留所有重复
-
+            # 合并：组合玩法号码 + 动物 + 普通号码（不去重，保留所有重复）
             all_targets = []
             target_type = None
 
-            if animals_found and numbers_found:
-                # 混合模式：动物保留重复 + 号码也保留重复
-                all_targets = animals_found + numbers_found
+            # 先加入组合玩法展开的号码
+            all_targets.extend(play_groups_found)
+
+            # 再加入动物和普通号码
+            if animals_found and numbers:
+                all_targets.extend(animals_found)
+                all_targets.extend(numbers)
                 target_type = 'mixed'
             elif animals_found:
-                # 仅动物：保留所有重复
-                all_targets = animals_found
+                all_targets.extend(animals_found)
                 target_type = 'animal'
-            elif numbers_found:
-                # 仅号码：也保留所有重复
-                all_targets = numbers_found
+            elif numbers:
+                all_targets.extend(numbers)
+                target_type = 'number'
+            elif play_groups_found:
                 target_type = 'number'
             else:
                 continue
@@ -313,6 +337,7 @@ class InstructionParser:
         normalized = self._normalize_punctuation(line)
 
         # 策略：
+        # 0. 先识别组合玩法（最长匹配优先）
         # 1. 查找关键词（各、数等）+ 金额
         # 2. 如果没有关键词，最后一个数字就是金额
         # 3. 前面的数字全部作为号码
@@ -359,13 +384,33 @@ class InstructionParser:
         # 解析金额
         try:
             amount = Decimal(amount_str)
-            if amount < 0:
-                raise ParserError(f"金额不能为负数: {amount_str}")
+            if amount <= 0:
+                raise ParserError(f"下注金额必须大于0")
             amount_integer = int(amount * AMOUNT_MULTIPLIER)
             if amount_integer > MAX_AMOUNT_INTEGER:
                 raise ParserError(f"金额超出可存储范围: {amount_str}")
         except (InvalidOperation, ValueError):
             raise ParserError(f"无效的金额格式: {amount_str}")
+
+        # ===== 新增：识别组合玩法 =====
+        # 先提取组合玩法，将其替换为占位符，避免玩法名称中的数字被误识别
+        play_groups_found = []
+        target_after_plays = target_part
+
+        plays = self.play_parser.extract_play_groups(target_part)
+        if plays:
+            # 从后往前替换，避免位置偏移
+            for play_name, start, end in reversed(plays):
+                # 展开玩法为号码列表
+                numbers = self.play_parser.expand_play_group(play_name)
+                if numbers:
+                    play_groups_found.extend(numbers)
+                    # 从target_part中完全移除这个玩法名称（用空字符串替换）
+                    target_after_plays = target_after_plays[:start] + target_after_plays[end:]
+
+            # 使用移除玩法后的文本继续提取动物和号码
+            target_part = target_after_plays.strip()
+        # ===== 组合玩法识别结束 =====
 
         # 移除常见的无关字符
         for char in ['号']:
@@ -390,21 +435,29 @@ class InstructionParser:
             except ValueError:
                 pass
 
-        # 合并动物和号码（不去重，按输入顺序）
+        # 合并：组合玩法号码 + 动物 + 普通号码（不去重，允许累计）
         all_targets = []
         target_type = None
 
+        # 先加入组合玩法展开的号码
+        all_targets.extend(play_groups_found)
+
+        # 再加入动物和普通号码
         if animals_found and numbers:
             # 混合模式：保留所有重复
-            all_targets = animals_found + numbers
+            all_targets.extend(animals_found)
+            all_targets.extend(numbers)
             target_type = 'mixed'
         elif animals_found:
             # 仅动物：保留所有重复
-            all_targets = animals_found
+            all_targets.extend(animals_found)
             target_type = 'animal'
         elif numbers:
             # 仅号码：保留所有重复
-            all_targets = numbers
+            all_targets.extend(numbers)
+            target_type = 'number'
+        elif play_groups_found:
+            # 仅组合玩法
             target_type = 'number'
         else:
             raise ParserError(f"未找到有效目标: {line}")
@@ -421,223 +474,7 @@ class InstructionParser:
         )
 
         return instruction
-        """解析单条指令 - 简化逻辑：提取目标和金额"""
-        original = line
 
-        # 标准化：全角转半角
-        normalized = self._normalize_punctuation(line)
-
-        # 查找关键词和金额
-        # 策略：关键词后的第一个连续数字就是金额，后面的文字全部忽略
-        amount_match = None
-        found_keyword = None
-
-        for keyword in EACH_SYNONYMS + ['数']:
-            # 查找：关键词后面跟着任意字符，然后是数字
-            pattern = rf'{re.escape(keyword)}\s*(\d+(?:\.\d+)?)'
-            match = re.search(pattern, normalized)
-            if match:
-                amount_match = match
-                found_keyword = keyword
-                # 找到关键词和金额后，移除金额后面的所有文字（米、元、块钱等）
-                # 只保留金额数字
-                break
-
-        # 如果没有关键词，尝试提取末尾的纯数字作为金额
-        if not amount_match:
-            # 匹配末尾的数字：非数字后面跟着数字直到结尾或遇到非数字字符
-            end_number_match = re.search(r'(\d+(?:\.\d+)?)(?:\D|$)', normalized)
-            if end_number_match:
-                amount_match = end_number_match
-                found_keyword = None  # 无关键词
-            else:
-                raise ParserError(f"未找到金额: {line}")
-
-        amount_str = amount_match.group(1)
-
-        # 解析金额
-        try:
-            amount = Decimal(amount_str)
-            if amount < 0:
-                raise ParserError(f"金额不能为负数: {amount_str}")
-            amount_integer = int(amount * AMOUNT_MULTIPLIER)
-            if amount_integer > MAX_AMOUNT_INTEGER:
-                raise ParserError(f"金额超出可存储范围: {amount_str}")
-        except (InvalidOperation, ValueError):
-            raise ParserError(f"无效的金额格式: {amount_str}")
-
-        # 关键词之前的部分是目标
-        target_part = normalized[:amount_match.start()].strip()
-
-        # 移除常见的无关字符
-        for char in ['号']:
-            target_part = target_part.replace(char, ' ')
-
-        target_part = ' '.join(target_part.split())
-
-        if not target_part:
-            raise ParserError(f"未找到目标: {line}")
-
-        # 提取动物（按顺序，不去重）
-        animals_found = []
-        for char in target_part:
-            if char in self.animals:
-                animals_found.append(char)
-
-        # 提取号码（从目标部分提取所有数字，按顺序，不去重）
-        numbers_found = re.findall(r'\d+', target_part)
-        numbers = []
-        for num_str in numbers_found:
-            try:
-                num = int(num_str)
-                if MIN_NUMBER <= num <= MAX_NUMBER:
-                    numbers.append(str(num))
-            except ValueError:
-                pass
-
-        # 合并动物和号码（不去重，按输入顺序）
-        all_targets = []
-        target_type = None
-
-        if animals_found and numbers:
-            # 混合模式：保留所有重复
-            all_targets = animals_found + numbers
-            target_type = 'mixed'
-        elif animals_found:
-            # 仅动物：保留所有重复
-            all_targets = animals_found
-            target_type = 'animal'
-        elif numbers:
-            # 仅号码：保留所有重复
-            all_targets = numbers
-            target_type = 'number'
-        else:
-            raise ParserError(f"未找到有效目标: {line}")
-
-        # 创建指令（不再检查重复）
-        warning = None
-
-        # 创建指令
-        instruction = Instruction(
-            source_line=line_num,
-            original_text=original,
-            normalized_text=normalized,
-            target_type=target_type,
-            targets=all_targets,
-            amount_integer=amount_integer,
-            warning=warning
-        )
-
-        return instruction
-        """解析单条指令 - 格式：目标+关键词+金额"""
-        original = line
-
-        # 标准化：全角转半角
-        normalized = self._normalize_punctuation(line)
-
-        # 查找关键词和金额
-        # 匹配：关键词+金额（如"各50"、"数30"、"个0.50"）
-        amount_match = None
-        found_keyword = None
-
-        for keyword in EACH_SYNONYMS + ['数']:
-            # 查找：关键词后面跟着数字
-            pattern = rf'{re.escape(keyword)}\s*(\d+(?:\.\d+)?)'
-            match = re.search(pattern, normalized)
-            if match:
-                amount_match = match
-                found_keyword = keyword
-                break
-
-        # 如果没有关键词，尝试提取末尾的纯数字作为金额
-        if not amount_match:
-            # 匹配末尾的数字：非数字后面跟着数字直到结尾
-            end_number_match = re.search(r'(\d+(?:\.\d+)?)$', normalized)
-            if end_number_match:
-                amount_match = end_number_match
-                found_keyword = None  # 无关键词
-            else:
-                raise ParserError(f"未找到金额: {line}")
-
-        amount_str = amount_match.group(1)
-
-        # 解析金额
-        try:
-            amount = Decimal(amount_str)
-            if amount < 0:
-                raise ParserError(f"金额不能为负数: {amount_str}")
-            amount_integer = int(amount * AMOUNT_MULTIPLIER)
-            if amount_integer > MAX_AMOUNT_INTEGER:
-                raise ParserError(f"金额超出可存储范围: {amount_str}")
-        except (InvalidOperation, ValueError):
-            raise ParserError(f"无效的金额格式: {amount_str}")
-
-        # 关键词之前的部分是目标
-        target_part = normalized[:amount_match.start()].strip()
-
-        # 移除常见的无关字符
-        for char in ['号', '：', ':']:
-            target_part = target_part.replace(char, ' ')
-
-        target_part = ' '.join(target_part.split())
-
-        if not target_part:
-            raise ParserError(f"未找到目标: {line}")
-
-        # 同时提取动物和号码
-        animals_found = []
-        for char in target_part:
-            if char in self.animals:
-                animals_found.append(char)
-
-        # 提取号码（从目标部分提取所有数字）
-        numbers_found = re.findall(r'\d+', target_part)
-        numbers = []
-        for num_str in numbers_found:
-            try:
-                num = int(num_str)
-                if MIN_NUMBER <= num <= MAX_NUMBER:
-                    numbers.append(str(num))
-            except ValueError:
-                pass
-
-        # 合并动物和号码（不去重动物和号码，保留所有重复）
-        # 动物：保留所有，包括重复
-        # 号码：也保留所有重复
-
-        all_targets = []
-        target_type = None
-
-        if animals_found and numbers:
-            # 混合模式：动物保留重复 + 号码也保留重复
-            all_targets = animals_found + numbers
-            target_type = 'mixed'
-        elif animals_found:
-            # 仅动物：保留所有重复
-            all_targets = animals_found
-            target_type = 'animal'
-        elif numbers:
-            # 仅号码：也保留所有重复
-            all_targets = numbers
-            target_type = 'number'
-        else:
-            raise ParserError(f"未找到有效目标: {line}")
-
-        # 创建指令（不再检查重复）
-        warning = None
-
-        # 创建指令
-        instruction = Instruction(
-            source_line=line_num,
-            original_text=original,
-            normalized_text=normalized,
-            target_type=target_type,
-            targets=all_targets,
-            amount_integer=amount_integer,
-            warning=warning
-        )
-
-        return instruction
 
     def _normalize_punctuation(self, text: str) -> str:
         """标准化标点符号和输入格式 - 所有标点符号只作为分隔符"""
