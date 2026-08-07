@@ -1,47 +1,57 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller macOS 配置 - 重构版
-确保所有资源文件从assets目录正确打包
+PyInstaller macOS 配置 - Clean Build
 """
 
 import os
+import sys
 from pathlib import Path
 
-# 项目信息
+# ============================================
+# 项目配置
+# ============================================
 APP_NAME = 'AnimalNumberLedger'
 APP_VERSION = '1.2.2'
-BUNDLE_IDENTIFIER = 'com.animalnumberledger.app'
+BUNDLE_ID = 'com.animalnumberledger.app'
+APP_DISPLAY_NAME = '十二动物号码归纳器'
 
-# 获取项目根目录
-spec_root = os.path.abspath(SPECPATH)
-project_root = os.path.dirname(spec_root)
+# ============================================
+# 路径配置（使用绝对路径）
+# ============================================
+# spec文件在 packaging/ 目录下
+SPEC_DIR = os.path.abspath(SPECPATH)
+PROJECT_ROOT = os.path.dirname(SPEC_DIR)
 
-print(f"=== PyInstaller 配置 ===")
-print(f"项目根目录: {project_root}")
-print(f"Spec目录: {spec_root}")
+print("="*60)
+print("PyInstaller 配置信息")
+print("="*60)
+print(f"项目根目录: {PROJECT_ROOT}")
+print(f"Spec目录: {SPEC_DIR}")
+print(f"Python版本: {sys.version}")
+print(f"平台: {sys.platform}")
+print("="*60)
 
-# 收集所有需要打包的数据文件
+# ============================================
+# 数据文件收集
+# ============================================
 datas = []
 
-# 1. assets目录（包含所有JSON配置文件）
-assets_dir = os.path.join(project_root, 'assets')
-if os.path.exists(assets_dir):
-    print(f"\n✓ 找到 assets 目录: {assets_dir}")
-    # 递归添加assets目录下的所有文件
-    for root, dirs, files in os.walk(assets_dir):
+# 1. assets 目录（包含所有JSON配置）
+assets_path = os.path.join(PROJECT_ROOT, 'assets')
+if os.path.exists(assets_path):
+    print(f"\n收集 assets 目录...")
+    for root, dirs, files in os.walk(assets_path):
         for file in files:
-            file_path = os.path.join(root, file)
-            # 计算相对路径
-            rel_path = os.path.relpath(file_path, project_root)
-            # 目标路径保持相同的目录结构
-            dest_dir = os.path.dirname(rel_path)
-            datas.append((file_path, dest_dir))
-            print(f"  + {rel_path}")
+            src = os.path.join(root, file)
+            # 保持相对路径结构
+            rel_dir = os.path.relpath(root, PROJECT_ROOT)
+            datas.append((src, rel_dir))
+            print(f"  + {os.path.relpath(src, PROJECT_ROOT)}")
 else:
-    print(f"\n✗ 警告: assets 目录不存在")
+    print(f"\n警告: assets 目录不存在: {assets_path}")
 
-# 2. 必需的Python模块文件
-required_modules = [
+# 2. 必需的Python模块文件（作为数据文件包含，确保运行时可访问）
+essential_files = [
     'constants.py',
     'format_utils.py',
     'platform_paths.py',
@@ -49,19 +59,23 @@ required_modules = [
     'head_filter.py',
 ]
 
-print(f"\n包含必需模块:")
-for filename in required_modules:
-    filepath = os.path.join(project_root, filename)
+print(f"\n收集必需模块...")
+for filename in essential_files:
+    filepath = os.path.join(PROJECT_ROOT, filename)
     if os.path.exists(filepath):
         datas.append((filepath, '.'))
-        print(f"  ✓ {filename}")
-    else:
-        print(f"  ✗ {filename} (不存在)")
+        print(f"  + {filename}")
 
-# 隐藏导入 - 确保所有运行时需要的模块都被包含
+print(f"\n数据文件总数: {len(datas)}")
+
+# ============================================
+# 隐藏导入（确保所有运行时模块被打包）
+# ============================================
 hiddenimports = [
-    # UI框架
+    # GUI框架
     'customtkinter',
+    'tkinter',
+    'tkinter.ttk',
     'PIL',
     'PIL._imagingtk',
     'PIL._tkinter_finder',
@@ -69,22 +83,32 @@ hiddenimports = [
     # 数据库
     'sqlite3',
 
-    # 项目核心模块
+    # 核心业务模块
     'database',
+    'models',
+    'constants',
+    'format_utils',
+    'platform_paths',
+    'platform_fonts',
+
+    # 计算器
     'calculator',
     'calculator_factory',
     'number_calculator',
     'animal_calculator',
-    'flat_zodiac_parser',
-    'flat_zodiac_service',
+
+    # 解析器
+    'parser',
+    'play_group_parser',
     'play_mode',
     'play_mode_config',
-    'play_group_parser',
+    'flat_zodiac_parser',
+    'flat_zodiac_service',
+
+    # 业务逻辑
     'daily_rollover',
-    'parser',
-    'models',
-    'backup',
     'settlement',
+    'backup',
     'head_filter',
 
     # UI模块
@@ -94,28 +118,39 @@ hiddenimports = [
     'ui.settlement_window',
     'ui.mapping_window',
     'ui.result_canvas_table',
+    'ui.result_table',
+    'ui.animal_result_table',
     'ui.delete_dialog',
 ]
 
-print(f"\n隐藏导入模块数量: {len(hiddenimports)}")
+print(f"\n隐藏导入模块数: {len(hiddenimports)}")
 
-# 排除不需要的模块（减小体积）
+# ============================================
+# 排除模块（减小包体积）
+# ============================================
 excludes = [
-    'tkinter.test',
+    'test',
+    'tests',
+    'pytest',
     'unittest',
     'email',
     'http',
     'xml',
-    'darkdetect',  # customtkinter会自动降级到默认模式
-    'test',
-    'tests',
+    'pydoc',
+    'doctest',
+    'argparse',
+    'difflib',
+    'inspect',
+    'darkdetect',  # 避免兼容性问题
 ]
 
-# 分析阶段
+# ============================================
+# Analysis 阶段
+# ============================================
 print(f"\n开始分析...")
 a = Analysis(
-    [os.path.join(project_root, 'app.py')],  # 使用app.py作为入口
-    pathex=[project_root],
+    [os.path.join(PROJECT_ROOT, 'app.py')],
+    pathex=[PROJECT_ROOT],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
@@ -129,10 +164,14 @@ a = Analysis(
     noarchive=False,
 )
 
-# 打包Python字节码
+# ============================================
+# PYZ 阶段
+# ============================================
 pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
-# 创建可执行文件
+# ============================================
+# EXE 阶段
+# ============================================
 exe = EXE(
     pyz,
     a.scripts,
@@ -143,14 +182,16 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,  # macOS GUI应用，不显示控制台
+    console=False,  # GUI应用，不显示控制台
     disable_windowed_traceback=False,
-    target_arch=None,  # 自动检测当前架构
+    target_arch=None,  # 自动检测架构
     codesign_identity=None,
     entitlements_file=None,
 )
 
-# 收集所有文件
+# ============================================
+# COLLECT 阶段
+# ============================================
 coll = COLLECT(
     exe,
     a.binaries,
@@ -162,29 +203,30 @@ coll = COLLECT(
     name=APP_NAME,
 )
 
-# 创建macOS应用包
+# ============================================
+# BUNDLE 阶段 - 创建 macOS .app
+# ============================================
 app = BUNDLE(
     coll,
     name=f'{APP_NAME}.app',
-    icon=None,  # 可以后续添加图标
-    bundle_identifier=BUNDLE_IDENTIFIER,
+    icon=None,
+    bundle_identifier=BUNDLE_ID,
     version=APP_VERSION,
     info_plist={
         'CFBundleName': APP_NAME,
-        'CFBundleDisplayName': '十二动物号码归纳器',
+        'CFBundleDisplayName': APP_DISPLAY_NAME,
         'CFBundleShortVersionString': APP_VERSION,
         'CFBundleVersion': APP_VERSION,
         'CFBundlePackageType': 'APPL',
         'CFBundleExecutable': APP_NAME,
-        'CFBundleIdentifier': BUNDLE_IDENTIFIER,
+        'CFBundleIdentifier': BUNDLE_ID,
         'NSHighResolutionCapable': True,
-        'NSRequiresAquaSystemAppearance': False,  # 支持暗色模式
-        'LSMinimumSystemVersion': '10.13.0',  # macOS 10.13+
-        'NSHumanReadableCopyright': '© 2024 AnimalNumberLedger',
+        'NSRequiresAquaSystemAppearance': False,
+        'LSMinimumSystemVersion': '10.13.0',
+        'NSHumanReadableCopyright': f'© 2024 {APP_NAME}',
     },
 )
 
-print(f"\n=== 配置完成 ===")
-print(f"应用名称: {APP_NAME}")
-print(f"版本: {APP_VERSION}")
-print(f"Bundle ID: {BUNDLE_IDENTIFIER}")
+print("="*60)
+print("配置完成")
+print("="*60)

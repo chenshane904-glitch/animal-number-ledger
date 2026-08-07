@@ -1,215 +1,302 @@
-name: Build macOS App (ARM64)
+name: Build macOS DMG
 
 on:
-  workflow_dispatch:  # 手动触发
+  workflow_dispatch:
   push:
     tags:
-      - 'v*'  # 版本标签触发
+      - 'v*'
 
 jobs:
-  build-macos-arm64:
-    name: Build for Apple Silicon (arm64)
+  build-arm64:
+    name: macOS ARM64 (Apple Silicon)
     runs-on: macos-latest
 
     steps:
-      - name: Checkout code
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show environment info
-        run: |
-          echo "=== Environment Info ==="
-          sw_vers
-          uname -m
-          python3 --version
-          echo "=== PyInstaller 版本 ==="
-          pip3 show pyinstaller || echo "PyInstaller 未安装"
-
-      - name: Set up Python 3.11
+      - name: Setup Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           architecture: 'arm64'
 
-      - name: Install dependencies
+      - name: Environment Info
+        run: |
+          echo "=== 环境信息 ==="
+          sw_vers
+          uname -m
+          python3 --version
+          which python3
+
+      - name: Install Dependencies
         run: |
           python3 -m pip install --upgrade pip
           pip install -r requirements-macos.txt
+          pip list
 
-      - name: Verify assets directory
+      - name: Verify Project Structure
         run: |
-          echo "=== 验证 assets 目录 ==="
-          if [ -d "assets" ]; then
-            echo "✓ assets 目录存在"
-            ls -la assets/
-          else
-            echo "✗ assets 目录不存在"
-            exit 1
-          fi
+          echo "=== 验证项目结构 ==="
 
-      - name: Verify spec file
-        run: |
-          echo "=== 验证 spec 文件 ==="
-          if [ -f "packaging/macos.spec" ]; then
-            echo "✓ macos.spec 存在"
-            head -20 packaging/macos.spec
-          else
-            echo "✗ macos.spec 不存在"
-            exit 1
-          fi
+          echo "检查主入口..."
+          test -f "app.py" && echo "✓ app.py" || (echo "✗ app.py 缺失" && exit 1)
 
-      - name: Build app with PyInstaller
+          echo "检查assets目录..."
+          test -d "assets" && echo "✓ assets/" || (echo "✗ assets/ 缺失" && exit 1)
+          ls -la assets/
+
+          echo "检查spec文件..."
+          test -f "packaging/macos.spec" && echo "✓ macos.spec" || (echo "✗ macos.spec 缺失" && exit 1)
+
+          echo "检查核心模块..."
+          test -f "database.py" && echo "✓ database.py" || echo "✗ database.py"
+          test -f "parser.py" && echo "✓ parser.py" || echo "✗ parser.py"
+          test -f "calculator.py" && echo "✓ calculator.py" || echo "✗ calculator.py"
+          test -d "ui" && echo "✓ ui/" || echo "✗ ui/"
+
+      - name: Build with PyInstaller
         run: |
           echo "=== 开始构建 ==="
           pyinstaller packaging/macos.spec --clean --noconfirm
 
-      - name: Verify app bundle structure
+      - name: Verify .app Bundle
         run: |
           echo "=== 验证 .app 结构 ==="
 
-          # 检查 .app 是否存在
-          if [ ! -d "dist/AnimalNumberLedger.app" ]; then
+          APP_PATH="dist/AnimalNumberLedger.app"
+
+          # 检查 .app
+          if [ ! -d "$APP_PATH" ]; then
             echo "✗ .app 不存在"
             exit 1
           fi
           echo "✓ .app 存在"
 
-          # 检查 Contents 目录
-          if [ ! -d "dist/AnimalNumberLedger.app/Contents" ]; then
-            echo "✗ Contents 目录不存在"
+          # 检查 Contents
+          if [ ! -d "$APP_PATH/Contents" ]; then
+            echo "✗ Contents/ 不存在"
             exit 1
           fi
-          echo "✓ Contents 目录存在"
+          echo "✓ Contents/ 存在"
 
-          # 检查 Info.plist
-          if [ ! -f "dist/AnimalNumberLedger.app/Contents/Info.plist" ]; then
-            echo "✗ Info.plist 不存在"
+          # 检查 MacOS
+          if [ ! -d "$APP_PATH/Contents/MacOS" ]; then
+            echo "✗ Contents/MacOS/ 不存在"
             exit 1
           fi
-          echo "✓ Info.plist 存在"
+          echo "✓ Contents/MacOS/ 存在"
 
           # 检查可执行文件
-          if [ ! -f "dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger" ]; then
+          EXEC_PATH="$APP_PATH/Contents/MacOS/AnimalNumberLedger"
+          if [ ! -f "$EXEC_PATH" ]; then
             echo "✗ 可执行文件不存在"
             exit 1
           fi
           echo "✓ 可执行文件存在"
 
-          # 检查可执行文件权限
-          if [ ! -x "dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger" ]; then
-            echo "✗ 可执行文件没有执行权限"
+          # 检查可执行权限
+          if [ ! -x "$EXEC_PATH" ]; then
+            echo "✗ 可执行文件无执行权限"
             exit 1
           fi
           echo "✓ 可执行文件有执行权限"
 
+          # 检查 Info.plist
+          if [ ! -f "$APP_PATH/Contents/Info.plist" ]; then
+            echo "✗ Info.plist 不存在"
+            exit 1
+          fi
+          echo "✓ Info.plist 存在"
+
+          # 检查 Resources（如果有资源文件的话）
+          if [ -d "$APP_PATH/Contents/Resources" ]; then
+            echo "✓ Contents/Resources/ 存在"
+            ls -la "$APP_PATH/Contents/Resources/" | head -20
+          fi
+
           # 显示目录结构
           echo ""
           echo "=== .app 目录结构 ==="
-          ls -laR dist/AnimalNumberLedger.app/Contents/ | head -100
+          find "$APP_PATH/Contents" -maxdepth 3 -type f | head -30
 
-      - name: Verify executable architecture
+      - name: Verify Resources
         run: |
-          echo "=== 验证可执行文件架构 ==="
+          echo "=== 验证资源文件 ==="
+
+          # 查找assets目录
+          if [ -d "dist/AnimalNumberLedger.app/Contents/MacOS/assets" ]; then
+            echo "✓ assets/ 在 MacOS/"
+            ls -la dist/AnimalNumberLedger.app/Contents/MacOS/assets/
+          elif [ -d "dist/AnimalNumberLedger.app/Contents/Resources/assets" ]; then
+            echo "✓ assets/ 在 Resources/"
+            ls -la dist/AnimalNumberLedger.app/Contents/Resources/assets/
+          else
+            echo "⚠ 未找到 assets/ 目录"
+          fi
+
+      - name: Check Architecture
+        run: |
+          echo "=== 检查架构 ==="
           file dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger
           lipo -info dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger || true
 
-      - name: Verify assets in bundle
+      - name: Code Sign
         run: |
-          echo "=== 验证资源文件是否打包 ==="
-          if [ -d "dist/AnimalNumberLedger.app/Contents/MacOS/assets" ]; then
-            echo "✓ assets 目录已打包"
-            ls -la dist/AnimalNumberLedger.app/Contents/MacOS/assets/
-          else
-            echo "✗ assets 目录未打包"
-            exit 1
-          fi
-
-      - name: Sign app (ad-hoc)
-        run: |
-          echo "=== 签名应用 ==="
+          echo "=== 代码签名 ==="
           codesign --force --deep --sign - dist/AnimalNumberLedger.app
           codesign --verify --verbose dist/AnimalNumberLedger.app
 
       - name: Create DMG
         run: |
           echo "=== 创建 DMG ==="
-          mkdir -p dmg
-          cp -r dist/AnimalNumberLedger.app dmg/
-          ln -s /Applications dmg/Applications
 
+          # 创建临时目录
+          mkdir -p dmg-temp
+
+          # 复制 .app
+          cp -r dist/AnimalNumberLedger.app dmg-temp/
+
+          # 创建 Applications 快捷方式
+          ln -s /Applications dmg-temp/Applications
+
+          # 生成 DMG
           hdiutil create -volname "AnimalNumberLedger" \
-            -srcfolder dmg \
+            -srcfolder dmg-temp \
             -ov -format UDZO \
-            AnimalNumberLedger-arm64.dmg
+            AnimalNumberLedger-macOS-arm64.dmg
 
-          ls -lh AnimalNumberLedger-arm64.dmg
+          # 显示文件信息
+          ls -lh AnimalNumberLedger-macOS-arm64.dmg
+          du -h AnimalNumberLedger-macOS-arm64.dmg
 
       - name: Verify DMG
         run: |
           echo "=== 验证 DMG ==="
-          if [ ! -f "AnimalNumberLedger-arm64.dmg" ]; then
+
+          # 检查文件存在
+          if [ ! -f "AnimalNumberLedger-macOS-arm64.dmg" ]; then
             echo "✗ DMG 文件不存在"
             exit 1
           fi
           echo "✓ DMG 文件存在"
 
-          # 获取DMG大小
-          DMG_SIZE=$(ls -lh AnimalNumberLedger-arm64.dmg | awk '{print $5}')
-          echo "DMG 大小: $DMG_SIZE"
+          # 挂载测试
+          echo "挂载 DMG..."
+          hdiutil attach AnimalNumberLedger-macOS-arm64.dmg -mountpoint /tmp/test-dmg
 
-          # 挂载DMG验证
-          echo "挂载 DMG 进行验证..."
-          hdiutil attach AnimalNumberLedger-arm64.dmg -mountpoint /tmp/test_dmg
+          # 检查内容
+          echo "DMG 内容:"
+          ls -la /tmp/test-dmg/
 
-          # 检查.app是否在DMG中
-          if [ -d "/tmp/test_dmg/AnimalNumberLedger.app" ]; then
-            echo "✓ DMG 中包含 .app"
+          if [ -d "/tmp/test-dmg/AnimalNumberLedger.app" ]; then
+            echo "✓ DMG 包含 .app"
           else
-            echo "✗ DMG 中不包含 .app"
-            hdiutil detach /tmp/test_dmg
+            echo "✗ DMG 不包含 .app"
+            hdiutil detach /tmp/test-dmg
             exit 1
           fi
 
-          # 卸载DMG
-          hdiutil detach /tmp/test_dmg
+          # 卸载
+          hdiutil detach /tmp/test-dmg
           echo "✓ DMG 验证通过"
 
-      - name: Create Release
+      - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          files: AnimalNumberLedger-arm64.dmg
+          files: AnimalNumberLedger-macOS-arm64.dmg
           draft: false
           prerelease: false
-          generate_release_notes: true
-          body: |
-            ## 十二动物号码归纳器 macOS 版本
-
-            ### 安装说明
-            1. 下载 `AnimalNumberLedger-arm64.dmg`
-            2. 双击打开 DMG
-            3. 将应用拖动到 Applications 文件夹
-            4. 首次启动：右键点击应用 → 打开（绕过 Gatekeeper）
-
-            ### 系统要求
-            - macOS 10.13 或更高版本
-            - Apple Silicon (M1/M2/M3)
-
-            ### 本次更新
-            - 新增头数筛选功能
-            - 优化资源文件打包
-            - 修复已知问题
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Summary
+  build-intel:
+    name: macOS x86_64 (Intel)
+    runs-on: macos-13
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Environment Info
         run: |
-          echo "=== 构建完成 ==="
-          echo "✓ .app 已创建"
-          echo "✓ DMG 已创建"
-          echo "✓ 所有验证通过"
-          echo ""
-          echo "下一步："
-          echo "1. 下载 DMG 文件"
-          echo "2. 在 macOS 上安装测试"
-          echo "3. 验证应用启动"
-          echo "4. 验证功能正常"
+          echo "=== 环境信息 ==="
+          sw_vers
+          uname -m
+          python3 --version
+
+      - name: Install Dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install -r requirements-macos.txt
+
+      - name: Verify Project Structure
+        run: |
+          echo "=== 验证项目结构 ==="
+          test -f "app.py" && echo "✓ app.py" || exit 1
+          test -d "assets" && echo "✓ assets/" || exit 1
+          test -f "packaging/macos.spec" && echo "✓ macos.spec" || exit 1
+
+      - name: Build with PyInstaller
+        run: |
+          echo "=== 开始构建 ==="
+          pyinstaller packaging/macos.spec --clean --noconfirm
+
+      - name: Verify .app Bundle
+        run: |
+          echo "=== 验证 .app 结构 ==="
+          test -d "dist/AnimalNumberLedger.app" && echo "✓ .app" || exit 1
+          test -f "dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger" && echo "✓ 可执行文件" || exit 1
+          test -x "dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger" && echo "✓ 执行权限" || exit 1
+          test -f "dist/AnimalNumberLedger.app/Contents/Info.plist" && echo "✓ Info.plist" || exit 1
+
+      - name: Check Architecture
+        run: |
+          echo "=== 检查架构 ==="
+          file dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger
+          lipo -info dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger || true
+
+      - name: Code Sign
+        run: |
+          echo "=== 代码签名 ==="
+          codesign --force --deep --sign - dist/AnimalNumberLedger.app
+          codesign --verify --verbose dist/AnimalNumberLedger.app
+
+      - name: Create DMG
+        run: |
+          echo "=== 创建 DMG ==="
+          mkdir -p dmg-temp
+          cp -r dist/AnimalNumberLedger.app dmg-temp/
+          ln -s /Applications dmg-temp/Applications
+
+          hdiutil create -volname "AnimalNumberLedger" \
+            -srcfolder dmg-temp \
+            -ov -format UDZO \
+            AnimalNumberLedger-macOS-x86_64.dmg
+
+          ls -lh AnimalNumberLedger-macOS-x86_64.dmg
+
+      - name: Verify DMG
+        run: |
+          echo "=== 验证 DMG ==="
+          test -f "AnimalNumberLedger-macOS-x86_64.dmg" && echo "✓ DMG" || exit 1
+
+          hdiutil attach AnimalNumberLedger-macOS-x86_64.dmg -mountpoint /tmp/test-dmg
+          test -d "/tmp/test-dmg/AnimalNumberLedger.app" && echo "✓ DMG内容" || exit 1
+          hdiutil detach /tmp/test-dmg
+
+      - name: Upload to Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
+        with:
+          files: AnimalNumberLedger-macOS-x86_64.dmg
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
