@@ -1,11 +1,10 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller macOS 配置文件
-用于构建 AnimalNumberLedger.app
+PyInstaller macOS 最小化配置
+只打包核心 Python 代码，资源动态检测
 """
 
 import os
-import sys
 from pathlib import Path
 
 # 项目信息
@@ -13,16 +12,13 @@ APP_NAME = 'AnimalNumberLedger'
 APP_VERSION = '1.22'
 BUNDLE_IDENTIFIER = 'com.animalnumberledger.app'
 
-# 构建配置
-block_cipher = None
-
-# 获取项目根目录（spec 文件在 packaging/ 目录下）
+# 获取项目根目录
 spec_root = os.path.abspath(SPECPATH)
 project_root = os.path.dirname(spec_root)
 
-# 需要包含的数据文件 - 使用绝对路径
+# 动态检测资源文件
 datas = []
-data_files = [
+optional_files = [
     'play_modes.json',
     'constants.py',
     'format_utils.py',
@@ -30,16 +26,15 @@ data_files = [
     'platform_fonts.py',
 ]
 
-# 动态添加存在的文件
-for file in data_files:
-    file_path = os.path.join(project_root, file)
-    if os.path.exists(file_path):
-        datas.append((file_path, '.'))
-        print(f"✓ Adding data file: {file}")
+for filename in optional_files:
+    filepath = os.path.join(project_root, filename)
+    if os.path.exists(filepath):
+        datas.append((filepath, '.'))
+        print(f"✓ Including: {filename}")
     else:
-        print(f"✗ Skipping missing file: {file}")
+        print(f"⊘ Skipping: {filename} (not found)")
 
-# 需要包含的隐藏导入
+# 隐藏导入
 hiddenimports = [
     'customtkinter',
     'PIL',
@@ -47,20 +42,9 @@ hiddenimports = [
     'PIL._tkinter_finder',
     'darkdetect',
     'sqlite3',
-    'database',
-    'calculator_factory',
-    'number_calculator',
-    'animal_calculator',
-    'flat_zodiac_parser',
-    'flat_zodiac_service',
-    'play_mode',
-    'daily_rollover',
-    'ui.main_window',
-    'ui.history_window',
-    'ui.animal_result_table',
 ]
 
-# 分析阶段
+# 分析
 a = Analysis(
     [os.path.join(project_root, 'app.py')],
     pathex=[project_root],
@@ -70,29 +54,15 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[
-        'tkinter.test',
-        'unittest',
-        'email',
-        'http',
-        'urllib',
-        'xml',
-        'pydoc',
-    ],
+    excludes=['tkinter.test', 'unittest', 'email', 'http', 'xml'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
-    cipher=block_cipher,
+    cipher=None,
     noarchive=False,
 )
 
-# PYZ 归档
-pyz = PYZ(
-    a.pure,
-    a.zipped_data,
-    cipher=block_cipher
-)
+pyz = PYZ(a.pure, a.zipped_data, cipher=None)
 
-# EXE 可执行文件
 exe = EXE(
     pyz,
     a.scripts,
@@ -110,7 +80,6 @@ exe = EXE(
     entitlements_file=None,
 )
 
-# COLLECT 收集文件
 coll = COLLECT(
     exe,
     a.binaries,
@@ -122,7 +91,6 @@ coll = COLLECT(
     name=APP_NAME,
 )
 
-# macOS App Bundle
 app = BUNDLE(
     coll,
     name=f'{APP_NAME}.app',
@@ -135,12 +103,10 @@ app = BUNDLE(
         'CFBundleShortVersionString': APP_VERSION,
         'CFBundleVersion': APP_VERSION,
         'CFBundlePackageType': 'APPL',
-        'CFBundleSignature': '????',
         'CFBundleExecutable': APP_NAME,
         'CFBundleIdentifier': BUNDLE_IDENTIFIER,
         'NSHighResolutionCapable': True,
         'NSRequiresAquaSystemAppearance': False,
         'LSMinimumSystemVersion': '10.13.0',
-        'NSHumanReadableCopyright': '© 2026 AnimalNumberLedger',
     },
 )
