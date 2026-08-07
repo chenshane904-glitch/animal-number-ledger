@@ -4,6 +4,7 @@ PyInstaller macOS 配置文件
 用于构建 AnimalNumberLedger.app
 """
 
+import os
 import sys
 from pathlib import Path
 
@@ -15,14 +16,28 @@ BUNDLE_IDENTIFIER = 'com.animalnumberledger.app'
 # 构建配置
 block_cipher = None
 
-# 需要包含的数据文件
-datas = [
-    ('play_modes.json', '.'),
-    ('constants.py', '.'),
-    ('format_utils.py', '.'),
-    ('platform_paths.py', '.'),
-    ('platform_fonts.py', '.'),
+# 获取项目根目录（spec 文件在 packaging/ 目录下）
+spec_root = os.path.abspath(SPECPATH)
+project_root = os.path.dirname(spec_root)
+
+# 需要包含的数据文件 - 使用绝对路径
+datas = []
+data_files = [
+    'play_modes.json',
+    'constants.py',
+    'format_utils.py',
+    'platform_paths.py',
+    'platform_fonts.py',
 ]
+
+# 动态添加存在的文件
+for file in data_files:
+    file_path = os.path.join(project_root, file)
+    if os.path.exists(file_path):
+        datas.append((file_path, '.'))
+        print(f"✓ Adding data file: {file}")
+    else:
+        print(f"✗ Skipping missing file: {file}")
 
 # 需要包含的隐藏导入
 hiddenimports = [
@@ -46,11 +61,6 @@ hiddenimports = [
 ]
 
 # 分析阶段
-# 获取项目根目录（spec 文件在 packaging/ 目录下）
-import os
-spec_root = os.path.abspath(SPECPATH)
-project_root = os.path.dirname(spec_root)
-
 a = Analysis(
     [os.path.join(project_root, 'app.py')],
     pathex=[project_root],
@@ -61,11 +71,13 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        'pywin32',
-        'win32api',
-        'win32con',
-        'win32gui',
-        'win32com',
+        'tkinter.test',
+        'unittest',
+        'email',
+        'http',
+        'urllib',
+        'xml',
+        'pydoc',
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
@@ -73,10 +85,14 @@ a = Analysis(
     noarchive=False,
 )
 
-# PYZ 阶段
-pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+# PYZ 归档
+pyz = PYZ(
+    a.pure,
+    a.zipped_data,
+    cipher=block_cipher
+)
 
-# EXE 阶段（macOS 不直接使用，但 BUNDLE 需要）
+# EXE 可执行文件
 exe = EXE(
     pyz,
     a.scripts,
@@ -87,15 +103,14 @@ exe = EXE(
     bootloader_ignore_signals=False,
     strip=False,
     upx=True,
-    console=False,  # 不显示终端窗口
+    console=False,
     disable_windowed_traceback=False,
-    argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
 )
 
-# 收集阶段
+# COLLECT 收集文件
 coll = COLLECT(
     exe,
     a.binaries,
@@ -111,7 +126,7 @@ coll = COLLECT(
 app = BUNDLE(
     coll,
     name=f'{APP_NAME}.app',
-    icon=None,  # 如果有图标，可以指定 'assets/icon.icns'
+    icon=None,
     bundle_identifier=BUNDLE_IDENTIFIER,
     version=APP_VERSION,
     info_plist={
@@ -125,7 +140,7 @@ app = BUNDLE(
         'CFBundleIdentifier': BUNDLE_IDENTIFIER,
         'NSHighResolutionCapable': True,
         'NSRequiresAquaSystemAppearance': False,
-        'LSMinimumSystemVersion': '10.13.0',  # macOS High Sierra
+        'LSMinimumSystemVersion': '10.13.0',
         'NSHumanReadableCopyright': '© 2026 AnimalNumberLedger',
     },
 )
