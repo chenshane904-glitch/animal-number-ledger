@@ -7,8 +7,95 @@ on:
       - 'v*'  # 版本标签触发
 
 jobs:
+  build-macos-arm64:
+    name: Build for Apple Silicon (arm64)
+    runs-on: macos-14  # Apple Silicon runner
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Show environment info
+        run: |
+          echo "=== Environment Info ==="
+          sw_vers
+          uname -m
+          python3 --version
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Create virtual environment
+        run: |
+          python3 -m venv venv
+          source venv/bin/activate
+          python --version
+          pip --version
+
+      - name: Install dependencies
+        run: |
+          source venv/bin/activate
+          pip install --upgrade pip
+          pip install -r requirements-macos.txt
+
+      - name: Test platform paths
+        run: |
+          source venv/bin/activate
+          python platform_paths.py
+
+      - name: Test platform fonts
+        run: |
+          source venv/bin/activate
+          python platform_fonts.py
+
+      - name: Build app with PyInstaller
+        run: |
+          source venv/bin/activate
+          pyinstaller packaging/macos.spec --clean --noconfirm
+
+      - name: Verify executable architecture
+        run: |
+          echo "=== Checking executable architecture ==="
+          file dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger
+          lipo -info dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger || true
+
+      - name: Sign app (ad-hoc)
+        run: |
+          echo "=== Signing app with ad-hoc signature ==="
+          codesign --force --deep --sign - dist/AnimalNumberLedger.app
+          codesign --verify --verbose dist/AnimalNumberLedger.app
+
+      - name: Verify app bundle structure
+        run: |
+          echo "=== App Bundle Structure ==="
+          ls -la dist/AnimalNumberLedger.app/Contents/
+          ls -la dist/AnimalNumberLedger.app/Contents/MacOS/
+
+      - name: Create DMG
+        run: |
+          echo "=== Creating DMG ==="
+          mkdir -p dmg
+          cp -r dist/AnimalNumberLedger.app dmg/
+          ln -s /Applications dmg/Applications
+
+          hdiutil create -volname "AnimalNumberLedger" \
+            -srcfolder dmg \
+            -ov -format UDZO \
+            AnimalNumberLedger-macOS-arm64.dmg
+
+          ls -lh AnimalNumberLedger-macOS-arm64.dmg
+
+      - name: Upload DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnimalNumberLedger-macOS-arm64
+          path: AnimalNumberLedger-macOS-arm64.dmg
+          retention-days: 90
+
   build-macos-intel:
-    name: Build for macOS (Intel x86_64)
+    name: Build for Intel (x86_64)
     runs-on: macos-13  # Intel runner
 
     steps:
