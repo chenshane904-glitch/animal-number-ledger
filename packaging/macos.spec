@@ -46,9 +46,14 @@ hiddenimports = [
 ]
 
 # 分析阶段
+# 获取项目根目录（spec 文件在 packaging/ 目录下）
+import os
+spec_root = os.path.abspath(SPECPATH)
+project_root = os.path.dirname(spec_root)
+
 a = Analysis(
-    ['app.py'],
-    pathex=[],
+    [os.path.join(project_root, 'app.py')],
+    pathex=[project_root],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
