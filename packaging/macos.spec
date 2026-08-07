@@ -1,7 +1,7 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
-PyInstaller macOS 最小化配置
-只打包核心 Python 代码，资源动态检测
+PyInstaller macOS 配置
+修复 darkdetect 兼容性问题
 """
 
 import os
@@ -34,14 +34,21 @@ for filename in optional_files:
     else:
         print(f"⊘ Skipping: {filename} (not found)")
 
-# 隐藏导入
+# 隐藏导入 - 移除 darkdetect，让 customtkinter 使用默认模式
 hiddenimports = [
     'customtkinter',
     'PIL',
     'PIL._imagingtk',
     'PIL._tkinter_finder',
-    'darkdetect',
     'sqlite3',
+    'database',
+    'calculator_factory',
+    'number_calculator',
+    'animal_calculator',
+    'flat_zodiac_parser',
+    'flat_zodiac_service',
+    'play_mode',
+    'daily_rollover',
 ]
 
 # 分析
@@ -54,7 +61,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=['tkinter.test', 'unittest', 'email', 'http', 'xml'],
+    excludes=['tkinter.test', 'unittest', 'email', 'http', 'xml', 'darkdetect'],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=None,
