@@ -121,7 +121,7 @@ if __name__ == '__main__':
     print(f"日志目录: {get_log_dir()}")
 
     print(f"\n资源路径示例:")
-    print(f"  play_modes.json: {get_config_path('play_modes.json')}")
+    print(f"  play_modes.json: {get_config_path('assets/play_modes.json')}")
 
     print("\n目录创建测试:")
     print(f"  用户数据目录存在: {get_user_data_dir().exists()}")

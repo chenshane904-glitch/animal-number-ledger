@@ -100,6 +100,9 @@ class InstructionParser:
 
     def _split_multi_instructions(self, line: str, line_num: int) -> List[Instruction]:
         """分割一行中的多条指令 - 智能语义解析"""
+        # 先展开数字范围（在标准化之前）
+        line = self._expand_range(line)
+
         # 标准化
         normalized = self._normalize_punctuation(line)
 
@@ -332,6 +335,9 @@ class InstructionParser:
     def _parse_single_instruction(self, line: str, line_num: int) -> Instruction:
         """解析单条指令 - 优化逻辑：最后一个数字是金额，前面的都是目标"""
         original = line
+
+        # 先展开数字范围（在标准化之前，避免破折号被替换）
+        line = self._expand_range(line)
 
         # 标准化：全角转半角
         normalized = self._normalize_punctuation(line)

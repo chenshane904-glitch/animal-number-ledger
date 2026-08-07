@@ -186,6 +186,33 @@ class MainWindow(ctk.CTk):
         ctk.CTkButton(input_header, text="清空", width=45, height=22, font=("Arial", 10),
                      command=self._clear_input, fg_color="#666666").pack(side='right', padx=8, pady=3)
 
+        # 头数快捷选择栏（仅在号码模式显示）
+        self.head_filter_frame = ctk.CTkFrame(input_container, height=32, fg_color="transparent")
+        self.head_filter_frame.pack(fill='x', padx=5, pady=(2, 0))
+        self.head_filter_frame.pack_propagate(False)
+
+        # 标签
+        ctk.CTkLabel(
+            self.head_filter_frame,
+            text="快捷:",
+            font=("Arial", 10)
+        ).pack(side='left', padx=(2, 5))
+
+        # 头数按钮
+        from head_filter import get_all_heads
+        for head_name in get_all_heads():
+            btn = ctk.CTkButton(
+                self.head_filter_frame,
+                text=head_name,
+                width=50,
+                height=26,
+                font=("Arial", 10),
+                fg_color="#4CAF50",
+                hover_color="#45a049",
+                command=lambda h=head_name: self._insert_head_numbers(h)
+            )
+            btn.pack(side='left', padx=2)
+
         # 输入框
         self.input_text = ctk.CTkTextbox(input_container, font=("Consolas", 10))
         self.input_text.pack(fill='both', expand=True, padx=5, pady=(2, 5))
@@ -474,9 +501,13 @@ class MainWindow(ctk.CTk):
         if mode == PlayMode.NUMBER:
             self.mode_number_btn.configure(fg_color="#1E88E5")
             self.mode_animal_btn.configure(fg_color="#666666")
+            # 显示头数快捷按钮（仅号码模式）
+            self.head_filter_frame.pack(fill='x', padx=5, pady=(2, 0))
         else:
             self.mode_number_btn.configure(fg_color="#666666")
             self.mode_animal_btn.configure(fg_color="#1E88E5")
+            # 隐藏头数快捷按钮（平特模式不需要）
+            self.head_filter_frame.pack_forget()
 
         # 销毁右侧所有widget
         for widget in self.right_frame.winfo_children():
@@ -1182,6 +1213,37 @@ class MainWindow(ctk.CTk):
                 messagebox.showinfo("成功", "已撤销")
             except DatabaseError as e:
                 messagebox.showerror("错误", f"撤销失败：{str(e)}")
+
+    def _insert_head_numbers(self, head_name: str):
+        """
+        插入头数对应的号码列表到输入框
+
+        参数:
+            head_name: 头数名称（一头、二头、三头、四头）
+        """
+        from head_filter import format_head_numbers_for_input
+
+        # 获取格式化的号码文本（带"各"关键词，等待用户输入金额）
+        numbers_text = format_head_numbers_for_input(head_name)
+
+        # 获取当前光标位置
+        cursor_pos = self.input_text.index("insert")
+
+        # 在光标位置插入号码列表
+        # 如果不是在行首，先插入换行
+        line_start = self.input_text.index(f"{cursor_pos} linestart")
+        line_content = self.input_text.get(line_start, cursor_pos)
+
+        if line_content.strip():  # 当前行有内容
+            self.input_text.insert(cursor_pos, "\n" + numbers_text)
+        else:  # 当前行为空
+            self.input_text.insert(cursor_pos, numbers_text)
+
+        # 触发输入变化事件，自动解析
+        self._on_input_change()
+
+        # 将焦点设置回输入框，光标移到行尾，方便用户输入金额
+        self.input_text.focus_set()
 
     def _clear_input(self):
         """清空输入"""

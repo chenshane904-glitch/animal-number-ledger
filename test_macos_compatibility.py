@@ -130,7 +130,7 @@ except Exception as e:
 # 测试 6: 资源文件访问
 print("\n[测试 6] 资源文件访问")
 try:
-    play_modes_path = get_resource_path('play_modes.json')
+    play_modes_path = get_resource_path('assets/play_modes.json')
     print(f"play_modes.json: {play_modes_path}")
 
     if play_modes_path.exists():

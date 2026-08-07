@@ -18,7 +18,7 @@ def load_play_mode_config(mode: PlayMode) -> dict:
     Returns:
         dict: 配置字典
     """
-    config_path = Path(__file__).parent / 'play_modes.json'
+    config_path = Path(__file__).parent / 'assets' / 'play_modes.json'
 
     with open(config_path, 'r', encoding='utf-8') as f:
         all_config = json.load(f)

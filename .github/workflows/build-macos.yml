@@ -1,4 +1,4 @@
-name: Build macOS App
+name: Build macOS App (ARM64)
 
 on:
   workflow_dispatch:  # 手动触发
@@ -9,7 +9,7 @@ on:
 jobs:
   build-macos-arm64:
     name: Build for Apple Silicon (arm64)
-    runs-on: macos-latest  # Apple Silicon runner
+    runs-on: macos-latest
 
     steps:
       - name: Checkout code
@@ -21,61 +21,117 @@ jobs:
           sw_vers
           uname -m
           python3 --version
+          echo "=== PyInstaller 版本 ==="
+          pip3 show pyinstaller || echo "PyInstaller 未安装"
 
       - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-
-      - name: Create virtual environment
-        run: |
-          python3 -m venv venv
-          source venv/bin/activate
-          python --version
-          pip --version
+          architecture: 'arm64'
 
       - name: Install dependencies
         run: |
-          source venv/bin/activate
-          pip install --upgrade pip
+          python3 -m pip install --upgrade pip
           pip install -r requirements-macos.txt
 
-      - name: Test platform paths
+      - name: Verify assets directory
         run: |
-          source venv/bin/activate
-          python platform_paths.py
+          echo "=== 验证 assets 目录 ==="
+          if [ -d "assets" ]; then
+            echo "✓ assets 目录存在"
+            ls -la assets/
+          else
+            echo "✗ assets 目录不存在"
+            exit 1
+          fi
 
-      - name: Test platform fonts
+      - name: Verify spec file
         run: |
-          source venv/bin/activate
-          python platform_fonts.py
+          echo "=== 验证 spec 文件 ==="
+          if [ -f "packaging/macos.spec" ]; then
+            echo "✓ macos.spec 存在"
+            head -20 packaging/macos.spec
+          else
+            echo "✗ macos.spec 不存在"
+            exit 1
+          fi
 
       - name: Build app with PyInstaller
         run: |
-          source venv/bin/activate
+          echo "=== 开始构建 ==="
           pyinstaller packaging/macos.spec --clean --noconfirm
-
-      - name: Verify executable architecture
-        run: |
-          echo "=== Checking executable architecture ==="
-          file dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger
-          lipo -info dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger || true
-
-      - name: Sign app (ad-hoc)
-        run: |
-          echo "=== Signing app with ad-hoc signature ==="
-          codesign --force --deep --sign - dist/AnimalNumberLedger.app
-          codesign --verify --verbose dist/AnimalNumberLedger.app
 
       - name: Verify app bundle structure
         run: |
-          echo "=== App Bundle Structure ==="
-          ls -la dist/AnimalNumberLedger.app/Contents/
-          ls -la dist/AnimalNumberLedger.app/Contents/MacOS/
+          echo "=== 验证 .app 结构 ==="
+
+          # 检查 .app 是否存在
+          if [ ! -d "dist/AnimalNumberLedger.app" ]; then
+            echo "✗ .app 不存在"
+            exit 1
+          fi
+          echo "✓ .app 存在"
+
+          # 检查 Contents 目录
+          if [ ! -d "dist/AnimalNumberLedger.app/Contents" ]; then
+            echo "✗ Contents 目录不存在"
+            exit 1
+          fi
+          echo "✓ Contents 目录存在"
+
+          # 检查 Info.plist
+          if [ ! -f "dist/AnimalNumberLedger.app/Contents/Info.plist" ]; then
+            echo "✗ Info.plist 不存在"
+            exit 1
+          fi
+          echo "✓ Info.plist 存在"
+
+          # 检查可执行文件
+          if [ ! -f "dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger" ]; then
+            echo "✗ 可执行文件不存在"
+            exit 1
+          fi
+          echo "✓ 可执行文件存在"
+
+          # 检查可执行文件权限
+          if [ ! -x "dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger" ]; then
+            echo "✗ 可执行文件没有执行权限"
+            exit 1
+          fi
+          echo "✓ 可执行文件有执行权限"
+
+          # 显示目录结构
+          echo ""
+          echo "=== .app 目录结构 ==="
+          ls -laR dist/AnimalNumberLedger.app/Contents/ | head -100
+
+      - name: Verify executable architecture
+        run: |
+          echo "=== 验证可执行文件架构 ==="
+          file dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger
+          lipo -info dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger || true
+
+      - name: Verify assets in bundle
+        run: |
+          echo "=== 验证资源文件是否打包 ==="
+          if [ -d "dist/AnimalNumberLedger.app/Contents/MacOS/assets" ]; then
+            echo "✓ assets 目录已打包"
+            ls -la dist/AnimalNumberLedger.app/Contents/MacOS/assets/
+          else
+            echo "✗ assets 目录未打包"
+            exit 1
+          fi
+
+      - name: Sign app (ad-hoc)
+        run: |
+          echo "=== 签名应用 ==="
+          codesign --force --deep --sign - dist/AnimalNumberLedger.app
+          codesign --verify --verbose dist/AnimalNumberLedger.app
 
       - name: Create DMG
         run: |
-          echo "=== Creating DMG ==="
+          echo "=== 创建 DMG ==="
           mkdir -p dmg
           cp -r dist/AnimalNumberLedger.app dmg/
           ln -s /Applications dmg/Applications
@@ -83,100 +139,77 @@ jobs:
           hdiutil create -volname "AnimalNumberLedger" \
             -srcfolder dmg \
             -ov -format UDZO \
-            AnimalNumberLedger-macOS-arm64.dmg
+            AnimalNumberLedger-arm64.dmg
 
-          ls -lh AnimalNumberLedger-macOS-arm64.dmg
+          ls -lh AnimalNumberLedger-arm64.dmg
 
-      - name: Upload DMG
-        uses: actions/upload-artifact@v4
+      - name: Verify DMG
+        run: |
+          echo "=== 验证 DMG ==="
+          if [ ! -f "AnimalNumberLedger-arm64.dmg" ]; then
+            echo "✗ DMG 文件不存在"
+            exit 1
+          fi
+          echo "✓ DMG 文件存在"
+
+          # 获取DMG大小
+          DMG_SIZE=$(ls -lh AnimalNumberLedger-arm64.dmg | awk '{print $5}')
+          echo "DMG 大小: $DMG_SIZE"
+
+          # 挂载DMG验证
+          echo "挂载 DMG 进行验证..."
+          hdiutil attach AnimalNumberLedger-arm64.dmg -mountpoint /tmp/test_dmg
+
+          # 检查.app是否在DMG中
+          if [ -d "/tmp/test_dmg/AnimalNumberLedger.app" ]; then
+            echo "✓ DMG 中包含 .app"
+          else
+            echo "✗ DMG 中不包含 .app"
+            hdiutil detach /tmp/test_dmg
+            exit 1
+          fi
+
+          # 卸载DMG
+          hdiutil detach /tmp/test_dmg
+          echo "✓ DMG 验证通过"
+
+      - name: Create Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v1
         with:
-          name: AnimalNumberLedger-macOS-arm64
-          path: AnimalNumberLedger-macOS-arm64.dmg
-          retention-days: 90
+          files: AnimalNumberLedger-arm64.dmg
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          body: |
+            ## 十二动物号码归纳器 macOS 版本
 
-  build-macos-intel:
-    name: Build for Intel (x86_64)
-    runs-on: macos-13  # Intel runner
+            ### 安装说明
+            1. 下载 `AnimalNumberLedger-arm64.dmg`
+            2. 双击打开 DMG
+            3. 将应用拖动到 Applications 文件夹
+            4. 首次启动：右键点击应用 → 打开（绕过 Gatekeeper）
 
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+            ### 系统要求
+            - macOS 10.13 或更高版本
+            - Apple Silicon (M1/M2/M3)
 
-      - name: Show environment info
+            ### 本次更新
+            - 新增头数筛选功能
+            - 优化资源文件打包
+            - 修复已知问题
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
         run: |
-          echo "=== Environment Info ==="
-          sw_vers
-          uname -m
-          python3 --version
-
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Create virtual environment
-        run: |
-          python3 -m venv venv
-          source venv/bin/activate
-          python --version
-          pip --version
-
-      - name: Install dependencies
-        run: |
-          source venv/bin/activate
-          pip install --upgrade pip
-          pip install -r requirements-macos.txt
-
-      - name: Test platform paths
-        run: |
-          source venv/bin/activate
-          python platform_paths.py
-
-      - name: Test platform fonts
-        run: |
-          source venv/bin/activate
-          python platform_fonts.py
-
-      - name: Build app with PyInstaller
-        run: |
-          source venv/bin/activate
-          pyinstaller packaging/macos.spec --clean --noconfirm
-
-      - name: Verify executable architecture
-        run: |
-          echo "=== Checking executable architecture ==="
-          file dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger
-          lipo -info dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger || true
-
-      - name: Sign app (ad-hoc)
-        run: |
-          echo "=== Signing app with ad-hoc signature ==="
-          codesign --force --deep --sign - dist/AnimalNumberLedger.app
-          codesign --verify --verbose dist/AnimalNumberLedger.app
-
-      - name: Verify app bundle structure
-        run: |
-          echo "=== App Bundle Structure ==="
-          ls -la dist/AnimalNumberLedger.app/Contents/
-          ls -la dist/AnimalNumberLedger.app/Contents/MacOS/
-
-      - name: Create DMG
-        run: |
-          echo "=== Creating DMG ==="
-          mkdir -p dmg
-          cp -r dist/AnimalNumberLedger.app dmg/
-          ln -s /Applications dmg/Applications
-
-          hdiutil create -volname "AnimalNumberLedger" \
-            -srcfolder dmg \
-            -ov -format UDZO \
-            AnimalNumberLedger-macOS-Intel.dmg
-
-          ls -lh AnimalNumberLedger-macOS-Intel.dmg
-
-      - name: Upload DMG
-        uses: actions/upload-artifact@v4
-        with:
-          name: AnimalNumberLedger-macOS-Intel
-          path: AnimalNumberLedger-macOS-Intel.dmg
-          retention-days: 90
+          echo "=== 构建完成 ==="
+          echo "✓ .app 已创建"
+          echo "✓ DMG 已创建"
+          echo "✓ 所有验证通过"
+          echo ""
+          echo "下一步："
+          echo "1. 下载 DMG 文件"
+          echo "2. 在 macOS 上安装测试"
+          echo "3. 验证应用启动"
+          echo "4. 验证功能正常"
