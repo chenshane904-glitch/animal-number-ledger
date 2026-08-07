@@ -36,11 +36,11 @@ jobs:
           cp -r dist/AnimalNumberLedger.app dmg-temp/
           ln -s /Applications dmg-temp/Applications
           hdiutil create -volname "AnimalNumberLedger" -srcfolder dmg-temp -ov -format UDZO AnimalNumberLedger-macOS-arm64.dmg
+          ls -lh AnimalNumberLedger-macOS-arm64.dmg
 
-      - name: Upload to Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+      - name: Upload DMG as Artifact
+        uses: actions/upload-artifact@v4
         with:
-          files: AnimalNumberLedger-macOS-arm64.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: AnimalNumberLedger-macOS-arm64
+          path: AnimalNumberLedger-macOS-arm64.dmg
+          retention-days: 7
