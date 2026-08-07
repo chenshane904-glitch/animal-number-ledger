@@ -9,8 +9,8 @@ darkdetect==0.8.0
 pillow==12.3.0
 
 # 打包工具
-pyinstaller==6.21.0
-pyinstaller-hooks-contrib==2026.6
+pyinstaller==6.3.0
+pyinstaller-hooks-contrib==2024.0
 
 # 标准库（SQLite 已内置在 Python 中，无需额外安装）
 
