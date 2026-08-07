@@ -51,9 +51,9 @@ hiddenimports = [
     'daily_rollover',
 ]
 
-# 分析
+# 分析 - 使用启动包装脚本
 a = Analysis(
-    [os.path.join(project_root, 'app.py')],
+    [os.path.join(project_root, 'app_launcher.py')],
     pathex=[project_root],
     binaries=[],
     datas=datas,
