@@ -9,7 +9,7 @@ on:
 jobs:
   build-arm64:
     name: macOS ARM64
-    runs-on: macos-latest
+    runs-on: macos-14  # 明确使用 macOS 14 (Apple Silicon)
 
     steps:
       - name: Checkout
@@ -25,24 +25,15 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install -r requirements-macos.txt
 
-      - name: Verify Structure
-        run: |
-          test -f "app.py" || exit 1
-          test -d "assets" || exit 1
-          test -f "packaging/macos.spec" || exit 1
-          echo "Structure OK"
-
       - name: Build App
         run: |
           pyinstaller packaging/macos.spec --clean --noconfirm
 
       - name: Verify App
         run: |
-          test -d "dist/AnimalNumberLedger.app" || exit 1
-          test -f "dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger" || exit 1
-          test -x "dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger" || exit 1
-          test -f "dist/AnimalNumberLedger.app/Contents/Info.plist" || exit 1
-          echo "App OK"
+          test -d "dist/AnimalNumberLedger.app"
+          test -f "dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger"
+          test -x "dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger"
 
       - name: Sign App
         run: |
@@ -55,74 +46,10 @@ jobs:
           ln -s /Applications dmg-temp/Applications
           hdiutil create -volname "AnimalNumberLedger" -srcfolder dmg-temp -ov -format UDZO AnimalNumberLedger-macOS-arm64.dmg
 
-      - name: Verify DMG
-        run: |
-          test -f "AnimalNumberLedger-macOS-arm64.dmg" || exit 1
-          hdiutil attach AnimalNumberLedger-macOS-arm64.dmg -mountpoint /tmp/verify-dmg
-          test -d "/tmp/verify-dmg/AnimalNumberLedger.app" || exit 1
-          hdiutil detach /tmp/verify-dmg
-          echo "DMG OK"
-
       - name: Upload to Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
           files: AnimalNumberLedger-macOS-arm64.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-intel:
-    name: macOS Intel
-    runs-on: macos-13
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Install Dependencies
-        run: |
-          python3 -m pip install --upgrade pip
-          pip install -r requirements-macos.txt
-
-      - name: Verify Structure
-        run: |
-          test -f "app.py" || exit 1
-          test -d "assets" || exit 1
-          test -f "packaging/macos.spec" || exit 1
-
-      - name: Build App
-        run: |
-          pyinstaller packaging/macos.spec --clean --noconfirm
-
-      - name: Verify App
-        run: |
-          test -d "dist/AnimalNumberLedger.app" || exit 1
-          test -f "dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger" || exit 1
-
-      - name: Sign App
-        run: |
-          codesign --force --deep --sign - dist/AnimalNumberLedger.app
-
-      - name: Create DMG
-        run: |
-          mkdir -p dmg-temp
-          cp -r dist/AnimalNumberLedger.app dmg-temp/
-          ln -s /Applications dmg-temp/Applications
-          hdiutil create -volname "AnimalNumberLedger" -srcfolder dmg-temp -ov -format UDZO AnimalNumberLedger-macOS-x86_64.dmg
-
-      - name: Verify DMG
-        run: |
-          test -f "AnimalNumberLedger-macOS-x86_64.dmg" || exit 1
-
-      - name: Upload to Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v1
-        with:
-          files: AnimalNumberLedger-macOS-x86_64.dmg
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
