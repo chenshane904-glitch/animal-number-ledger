@@ -248,6 +248,17 @@ class Database:
                 WHERE status = 'archived' AND settled_total_integer IS NULL
             """)
 
+            # 数据库迁移：添加 play_mode 字段到 input_history 表（如果不存在）
+            # 检查 play_mode 字段是否存在
+            cursor.execute("PRAGMA table_info(input_history)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'play_mode' not in columns:
+                # 添加 play_mode 字段，默认值为 'number'（号码模式）
+                cursor.execute("""
+                    ALTER TABLE input_history
+                    ADD COLUMN play_mode TEXT NOT NULL DEFAULT 'number'
+                """)
+
             self.conn.commit()
 
             # 初始化设置

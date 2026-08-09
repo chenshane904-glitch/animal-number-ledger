@@ -13,6 +13,7 @@ from constants import (
 )
 from models import Instruction
 from play_group_parser import PlayGroupsLoader, PlayGroupParser
+from head_filter import get_head_numbers, is_valid_head
 
 
 class ParserError(Exception):
@@ -33,6 +34,51 @@ class InstructionParser:
         except Exception as e:
             # 如果配置文件不存在或有错误，抛出明确错误
             raise ParserError(f"组合玩法配置加载失败: {e}")
+
+    def _parse_head_input(self, text: str) -> Tuple[bool, List[int], str]:
+        """
+        解析头数输入
+
+        Args:
+            text: 输入文本
+
+        Returns:
+            (是否为头数输入, 号码列表, 剩余文本)
+
+        示例:
+            "1头20" -> (True, [10,11,12,13,14,15,16,17,18,19], "20")
+            "一头50" -> (True, [10,11,12,13,14,15,16,17,18,19], "50")
+        """
+        # 匹配模式: 数字+头 或 中文+头
+        head_pattern = r'^([1-4一二三四])头(.*)$'
+        match = re.match(head_pattern, text.strip())
+
+        if not match:
+            return False, [], text
+
+        head_char = match.group(1)
+        remaining = match.group(2).strip()
+
+        # 转换为标准头数名称
+        head_map = {
+            '1': '一头',
+            '一': '一头',
+            '2': '二头',
+            '二': '二头',
+            '3': '三头',
+            '三': '三头',
+            '4': '四头',
+            '四': '四头',
+        }
+
+        head_name = head_map.get(head_char)
+        if not head_name or not is_valid_head(head_name):
+            return False, [], text
+
+        # 获取该头数的所有号码
+        numbers = get_head_numbers(head_name)
+
+        return True, numbers, remaining
 
     def _chinese_to_number(self, text: str) -> str:
         """转换中文数字为阿拉伯数字"""
@@ -100,6 +146,31 @@ class InstructionParser:
 
     def _split_multi_instructions(self, line: str, line_num: int) -> List[Instruction]:
         """分割一行中的多条指令 - 智能语义解析"""
+        # 先检查是否为头数输入
+        is_head, head_numbers, remaining_text = self._parse_head_input(line)
+        if is_head:
+            # 头数输入：提取金额
+            amount_match = re.search(r'(\d+(?:\.\d+)?)', remaining_text)
+            if amount_match:
+                amount_str = amount_match.group(1)
+                try:
+                    amount = Decimal(amount_str)
+                    if amount >= 0:
+                        amount_integer = int(amount * AMOUNT_MULTIPLIER)
+                        if amount_integer <= MAX_AMOUNT_INTEGER:
+                            # 为每个号码创建指令
+                            instructions = []
+                            for num in head_numbers:
+                                instructions.append(Instruction(
+                                    numbers=[str(num)],
+                                    animals=[],
+                                    amount_integer=amount_integer
+                                ))
+                            return instructions
+                except (InvalidOperation, ValueError):
+                    pass
+            # 如果金额解析失败，继续使用常规解析
+
         # 先展开数字范围（在标准化之前）
         line = self._expand_range(line)
 
