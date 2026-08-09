@@ -1,0 +1,188 @@
+name: Build macOS App v1.2.4
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v1.2.4*'
+
+jobs:
+  build-arm64:
+    name: macOS ARM64 (Apple Silicon)
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install pyinstaller==6.3.0 customtkinter==5.2.1 pillow==10.2.0 darkdetect==0.8.0
+
+      - name: Run v2 Engine Tests
+        run: |
+          echo "=== 测试 v2 解析引擎 ==="
+          python test_parser_v2.py
+          echo "=== 测试集成 ==="
+          python test_integration.py
+
+      - name: Clean Build
+        run: |
+          cd packaging
+          rm -rf build dist
+          echo "清理完成"
+
+      - name: Build App
+        run: |
+          cd packaging
+          pyinstaller macos.spec --clean --noconfirm
+          echo "构建完成"
+
+      - name: Verify App Structure
+        run: |
+          echo "=== 验证 .app 结构 ==="
+          test -d "packaging/dist/AnimalNumberLedger.app/Contents" || exit 1
+          test -d "packaging/dist/AnimalNumberLedger.app/Contents/MacOS" || exit 1
+          test -d "packaging/dist/AnimalNumberLedger.app/Contents/Resources" || exit 1
+          test -f "packaging/dist/AnimalNumberLedger.app/Contents/Info.plist" || exit 1
+          test -x "packaging/dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger" || exit 1
+          echo "✓ 结构验证通过"
+
+      - name: Sign App
+        run: |
+          echo "=== 签名应用 ==="
+          codesign --force --deep --sign - packaging/dist/AnimalNumberLedger.app
+          codesign --verify --verbose packaging/dist/AnimalNumberLedger.app
+          echo "✓ 签名完成"
+
+      - name: Launch Test
+        run: |
+          echo "=== 启动测试 ==="
+          packaging/dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger &
+          APP_PID=$!
+          echo "应用 PID: $APP_PID"
+
+          sleep 5
+
+          if ps -p $APP_PID > /dev/null; then
+            echo "✓ 应用启动成功"
+            kill $APP_PID 2>/dev/null || true
+            sleep 1
+            kill -9 $APP_PID 2>/dev/null || true
+          else
+            echo "✗ 应用启动失败"
+            exit 1
+          fi
+
+      - name: Create DMG
+        run: |
+          echo "=== 创建 DMG ==="
+          mkdir -p dmg-temp
+          cp -r packaging/dist/AnimalNumberLedger.app dmg-temp/
+          ln -s /Applications dmg-temp/Applications
+          hdiutil create -volname "十二动物号码归纳器 v1.2.4" -srcfolder dmg-temp -ov -format UDZO AnimalNumberLedger-v1.2.4-macOS-arm64.dmg
+          ls -lh AnimalNumberLedger-v1.2.4-macOS-arm64.dmg
+          echo "✓ DMG 创建成功"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnimalNumberLedger-v1.2.4-macOS-arm64
+          path: AnimalNumberLedger-v1.2.4-macOS-arm64.dmg
+          retention-days: 30
+
+  build-intel:
+    name: macOS Intel (x86_64)
+    runs-on: macos-13
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Dependencies
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install pyinstaller==6.3.0 customtkinter==5.2.1 pillow==10.2.0 darkdetect==0.8.0
+
+      - name: Run v2 Engine Tests
+        run: |
+          echo "=== 测试 v2 解析引擎 ==="
+          python test_parser_v2.py
+          echo "=== 测试集成 ==="
+          python test_integration.py
+
+      - name: Clean Build
+        run: |
+          cd packaging
+          rm -rf build dist
+          echo "清理完成"
+
+      - name: Build App
+        run: |
+          cd packaging
+          pyinstaller macos.spec --clean --noconfirm
+          echo "构建完成"
+
+      - name: Verify App Structure
+        run: |
+          echo "=== 验证 .app 结构 ==="
+          test -d "packaging/dist/AnimalNumberLedger.app/Contents" || exit 1
+          test -d "packaging/dist/AnimalNumberLedger.app/Contents/MacOS" || exit 1
+          test -d "packaging/dist/AnimalNumberLedger.app/Contents/Resources" || exit 1
+          test -f "packaging/dist/AnimalNumberLedger.app/Contents/Info.plist" || exit 1
+          test -x "packaging/dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger" || exit 1
+          echo "✓ 结构验证通过"
+
+      - name: Sign App
+        run: |
+          echo "=== 签名应用 ==="
+          codesign --force --deep --sign - packaging/dist/AnimalNumberLedger.app
+          codesign --verify --verbose packaging/dist/AnimalNumberLedger.app
+          echo "✓ 签名完成"
+
+      - name: Launch Test
+        run: |
+          echo "=== 启动测试 ==="
+          packaging/dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger &
+          APP_PID=$!
+          echo "应用 PID: $APP_PID"
+
+          sleep 5
+
+          if ps -p $APP_PID > /dev/null; then
+            echo "✓ 应用启动成功"
+            kill $APP_PID 2>/dev/null || true
+            sleep 1
+            kill -9 $APP_PID 2>/dev/null || true
+          else
+            echo "✗ 应用启动失败"
+            exit 1
+          fi
+
+      - name: Create DMG
+        run: |
+          echo "=== 创建 DMG ==="
+          mkdir -p dmg-temp
+          cp -r packaging/dist/AnimalNumberLedger.app dmg-temp/
+          ln -s /Applications dmg-temp/Applications
+          hdiutil create -volname "十二动物号码归纳器 v1.2.4" -srcfolder dmg-temp -ov -format UDZO AnimalNumberLedger-v1.2.4-macOS-intel.dmg
+          ls -lh AnimalNumberLedger-v1.2.4-macOS-intel.dmg
+          echo "✓ DMG 创建成功"
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: AnimalNumberLedger-v1.2.4-macOS-intel
+          path: AnimalNumberLedger-v1.2.4-macOS-intel.dmg
+          retention-days: 30
