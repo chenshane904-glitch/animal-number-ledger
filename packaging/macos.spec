@@ -83,6 +83,11 @@ hiddenimports = [
     # 数据库
     'sqlite3',
 
+    # XML 模块（PIL依赖）
+    'xml',
+    'xml.etree',
+    'xml.etree.ElementTree',
+
     # 核心业务模块
     'database',
     'models',
@@ -135,7 +140,6 @@ excludes = [
     'unittest',
     'email',
     'http',
-    'xml',
     'pydoc',
     'doctest',
     'argparse',
