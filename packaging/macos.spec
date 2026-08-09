@@ -6,6 +6,7 @@ PyInstaller macOS 配置 - Clean Build
 import os
 import sys
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_submodules
 
 # ============================================
 # 项目配置
@@ -83,10 +84,28 @@ hiddenimports = [
     # 数据库
     'sqlite3',
 
-    # XML 模块（PIL依赖）
+    # Python 标准库 - email
+    'email',
+    'email.mime',
+    'email.mime.text',
+    'email.mime.multipart',
+    'email.mime.base',
+    'email.mime.image',
+    'email.mime.audio',
+    'email.encoders',
+    'email.utils',
+
+    # Python 标准库 - xml
     'xml',
     'xml.etree',
     'xml.etree.ElementTree',
+
+    # Python 标准库 - pkg_resources
+    'pkg_resources',
+    'pkg_resources.py2_warn',
+
+    # setuptools
+    'setuptools',
 
     # 核心业务模块
     'database',
@@ -128,7 +147,23 @@ hiddenimports = [
     'ui.delete_dialog',
 ]
 
-print(f"\n隐藏导入模块数: {len(hiddenimports)}")
+# 使用 collect_submodules 收集完整的标准库模块
+print(f"\n收集子模块...")
+try:
+    email_modules = collect_submodules('email')
+    hiddenimports += email_modules
+    print(f"  + email 子模块: {len(email_modules)} 个")
+except Exception as e:
+    print(f"  警告: 无法收集 email 子模块: {e}")
+
+try:
+    pkg_modules = collect_submodules('pkg_resources')
+    hiddenimports += pkg_modules
+    print(f"  + pkg_resources 子模块: {len(pkg_modules)} 个")
+except Exception as e:
+    print(f"  警告: 无法收集 pkg_resources 子模块: {e}")
+
+print(f"\n隐藏导入模块总数: {len(hiddenimports)}")
 
 # ============================================
 # 排除模块（减小包体积）
@@ -138,13 +173,9 @@ excludes = [
     'tests',
     'pytest',
     'unittest',
-    'email',
     'http',
     'pydoc',
     'doctest',
-    'argparse',
-    'difflib',
-    'inspect',
     'darkdetect',  # 避免兼容性问题
 ]
 
