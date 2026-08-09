@@ -15,6 +15,13 @@ from models import Instruction
 from play_group_parser import PlayGroupsLoader, PlayGroupParser
 from head_filter import get_head_numbers, is_valid_head
 
+# 导入 v2 解析引擎
+try:
+    from parser_v2 import get_parser_v2
+    V2_ENGINE_AVAILABLE = True
+except ImportError:
+    V2_ENGINE_AVAILABLE = False
+
 
 class ParserError(Exception):
     """解析错误"""
@@ -26,6 +33,15 @@ class InstructionParser:
 
     def __init__(self, animals: dict):
         self.animals = animals
+
+        # 初始化 v2 引擎
+        if V2_ENGINE_AVAILABLE:
+            try:
+                self.parser_v2 = get_parser_v2()
+            except Exception:
+                self.parser_v2 = None
+        else:
+            self.parser_v2 = None
 
         # 加载组合玩法
         try:
@@ -146,7 +162,20 @@ class InstructionParser:
 
     def _split_multi_instructions(self, line: str, line_num: int) -> List[Instruction]:
         """分割一行中的多条指令 - 智能语义解析"""
-        # 先检查是否为头数输入
+        # 优先尝试 v2 引擎（支持颜色、头数、尾数等组合玩法）
+        if self.parser_v2:
+            try:
+                v2_result = self.parser_v2.parse(line)
+                if v2_result:  # v2 引擎成功解析
+                    # 更新 source_line
+                    for inst in v2_result:
+                        inst.source_line = line_num
+                    return v2_result
+            except Exception:
+                # v2 引擎失败，继续使用旧逻辑
+                pass
+
+        # 先检查是否为头数输入（旧的头数逻辑，v2 未能处理的情况）
         is_head, head_numbers, remaining_text = self._parse_head_input(line)
         if is_head:
             # 头数输入：提取金额
