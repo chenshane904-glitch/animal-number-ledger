@@ -8,13 +8,14 @@ import re
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 from constants import MIN_NUMBER, MAX_NUMBER
+from platform_paths import get_resource_path
 
 
 class PlayGroupsLoader:
     """组合玩法配置加载器"""
 
     def __init__(self, config_path: str = "assets/play_groups.json"):
-        self.config_path = Path(config_path)
+        self.config_path = get_resource_path(config_path)
         self.play_groups: Dict[str, List[str]] = {}
         self._load_config()
 
