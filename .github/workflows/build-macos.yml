@@ -29,9 +29,31 @@ jobs:
         run: |
           pyinstaller packaging/macos.spec --clean --noconfirm
 
+      - name: Verify App Structure
+        run: |
+          echo "=== 验证 .app 结构 ==="
+          ls -la dist/AnimalNumberLedger.app/Contents/
+          echo ""
+          echo "=== Info.plist 内容 ==="
+          cat dist/AnimalNumberLedger.app/Contents/Info.plist
+          echo ""
+          echo "=== MacOS 目录 ==="
+          ls -la dist/AnimalNumberLedger.app/Contents/MacOS/ | head -20
+          echo ""
+          echo "=== 检查可执行文件 ==="
+          file dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger
+          otool -L dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger | head -20
+
+      - name: Test Launch App
+        run: |
+          echo "=== 尝试启动应用 ==="
+          timeout 10s dist/AnimalNumberLedger.app/Contents/MacOS/AnimalNumberLedger --version || true
+          echo "启动测试完成"
+
       - name: Sign and Create DMG
         run: |
           codesign --force --deep --sign - dist/AnimalNumberLedger.app
+          codesign --verify --verbose=4 dist/AnimalNumberLedger.app 2>&1 || true
           mkdir -p dmg-temp
           cp -r dist/AnimalNumberLedger.app dmg-temp/
           ln -s /Applications dmg-temp/Applications
