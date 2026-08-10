@@ -127,18 +127,16 @@ class InstructionParser:
         return result
 
     def _expand_range(self, text: str) -> str:
-        """展开数字范围 14-16 -> 14,15,16"""
-        # 查找所有范围模式：数字-数字
-        pattern = r'(\d+)-(\d+)'
+        """
+        禁用自动范围展开
 
-        def replace_range(match):
-            start = int(match.group(1))
-            end = int(match.group(2))
-            if start < end and end - start <= 50:  # 限制范围，避免异常大的范围
-                return ','.join(str(i) for i in range(start, end + 1))
-            return match.group(0)  # 保持原样
+        注意：07-19-27 不应该展开为 7,8,9,10...19,27
+        而应该保持为 07,19,27
 
-        return re.sub(pattern, replace_range, text)
+        只有明确的范围语法才应该展开（将来实现）
+        """
+        # 禁用自动展开，直接返回原文本
+        return text
 
     def parse_input(self, input_text: str) -> List[Instruction]:
         """解析输入文本为指令列表 - 支持多条指令在同一行"""
